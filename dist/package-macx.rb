@@ -1,12 +1,12 @@
 $framework_path = "/Library/Frameworks"
 $cuda_library_path = "/usr/local/cuda/lib"
-$custom_library_path = "../../../maclib"
+$custom_library_path = "../lib/sonicawe-maclib/lib"
 $command_line_width = 80
 
 # Configuration
 $custom_exec = "../sonicawe"
 $custom_exec = ARGV[2] if( ARGV[1] and !ARGV[1].match(/^--/) )
-$platform = "macos_i386"
+$platform = "osx"
 $platform = ARGV[1] if( ARGV[1] and !ARGV[1].match(/^--/) )
 $version = "sonicawe_dev"
 $version = ARGV[0] if( ARGV[0] and !ARGV[0].match(/^--/) )
@@ -46,8 +46,8 @@ def package_macos(app_name, version, zip = false)
                  custom_lib_path("ogg"),
                  custom_lib_path("vorbis"),
                  custom_lib_path("vorbisenc"),
-                 custom_lib_path("hdf5", "hdf5/bin"),
-                 custom_lib_path("hdf5_hl", "hdf5/bin")]
+                 custom_lib_path("hdf5"),
+                 custom_lib_path("hdf5_hl")]
     
     directories = ["Contents/Frameworks",
                    "Contents/MacOS",
