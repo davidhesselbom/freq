@@ -1,0 +1,3 @@
+buildandrun.sh
+
+pause

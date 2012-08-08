@@ -75,7 +75,7 @@ void FftClAmdFft::
                        "clAmdFftEnqueueTransform failed" );
         */
 
-		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadOnly<1>( input ).ptr() };
+		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
         clamdfft_error = clAmdFftEnqueueTransform(
