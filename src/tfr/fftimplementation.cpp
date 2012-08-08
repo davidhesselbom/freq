@@ -1,16 +1,17 @@
 #include "fftimplementation.h"
 #include "neat_math.h"
 
+/*
 #include "fftooura.h"
-#include "fftclfft.h"
+#include "fftclamdfft.h"
 #include "fftcufft.h"
 
 #if defined(USE_CUDA) && !defined(USE_CUFFT)
 #define USE_CUFFT
 #endif
-
+*/
 namespace Tfr {
-
+/*
 FftImplementation& FftImplementation::
         Singleton()
 {
@@ -23,7 +24,7 @@ FftImplementation& FftImplementation::
 #endif
     return fft;
 }
-
+*/
 
 unsigned FftImplementation::
         lChunkSizeS(unsigned x, unsigned)
