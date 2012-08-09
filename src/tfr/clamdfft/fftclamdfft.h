@@ -1,11 +1,13 @@
-#ifndef FFTCLFFT_H
-#define FFTCLFFT_H
+#ifndef FFTCLAMDFFT_H
+#define FFTCLAMDFFT_H
 
-#include "fftimplementation.h"
+#include "tfr/fftimplementation.h"
 
 namespace Tfr {
-    class FftClFft: public FftImplementation {
+    class FftClAmdFft: public FftImplementation {
     public:
+        FftClAmdFft();
+        ~FftClAmdFft();
         void compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction );
         void computeR2C( DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output );
         void computeC2R( Tfr::ChunkData::Ptr input, DataStorage<float>::Ptr output );

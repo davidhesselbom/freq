@@ -1,19 +1,19 @@
 #ifdef USE_OPENCL
 
 #include <stdexcept>
-#include "stft.h"
-#include "fftclfft.h"
-#include "stftkernel.h"
-#include "openclcontext.h"
+#include "tfr/stft.h"
+#include "tfr/stftkernel.h"
+#include "tfr/complexbuffer.h"
 
+#include "fftclamdfft.h"
+#include "openclcontext.h"
 #include "cpumemorystorage.h"
 #include "openclmemorystorage.h"
-#include "complexbuffer.h"
 #include "TaskTimer.h"
 #include "computationkernel.h"
-#include "clfft/clfftkernelbuffer.h"
+#include "clamdfftkernelbuffer.h"
 
-#include "clfft/clFFT.h"
+#include "clAmdFft.h"
 
 #define TIME_STFT
 //#define TIME_STFT if(0)
@@ -21,11 +21,29 @@
 
 namespace Tfr {
 
+FftClAmdFft::FftClAmdFft()
+{
+    std::auto_ptr< clAmdFftSetupData > setupData( new clAmdFftSetupData );
+    clAmdFftStatus error = clAmdFftInitSetupData( setupData.get( ) );
+    if (error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not init setupdata for clAmdFFT.");
 
-void FftClFft::
+    error = clAmdFftSetup( setupData.get( ) );
+    if (error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not setup clAmdFFT.");
+}
+
+FftClAmdFft::~FftClAmdFft()
+{
+    clAmdFftStatus error = clAmdFftTeardown( );
+    if (error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not tear down clAmdFFT.");
+}
+
+void FftClAmdFft::
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction )
 {
-    TIME_STFT TaskTimer tt("Fft ClFft");
+    TIME_STFT TaskTimer tt("Fft AmdClFft");
 
     unsigned n = input->getNumberOfElements().width;
     unsigned N = output->getNumberOfElements().width;
@@ -34,32 +52,59 @@ void FftClFft::
         BOOST_ASSERT( n == N );
 
     {
+        clAmdFftDirection dir = ((direction == FftDirection_Forward) ? CLFFT_FORWARD : CLFFT_BACKWARD);
+
         TIME_STFT TaskTimer tt("Computing fft(N=%u, n=%u, direction=%d)", N, n, direction);
         OpenCLContext *opencl = &OpenCLContext::Singleton();
-        cl_int fft_error;
+        //cl_int fft_error;
+        clAmdFftStatus clamdfft_error;
 
-        clFFT_Plan plan = CLFFTKernelBuffer::Singleton().getPlan(opencl->getContext(), n, fft_error);
-        if (fft_error != CL_SUCCESS)
-            throw std::runtime_error("Could not create clFFT compute plan.");
+        //clFFT_Plan plan = CLFFTKernelBuffer::Singleton().getPlan(opencl->getContext(), n, fft_error);
+        clAmdFftPlanHandle plan = CLAMDFFTKernelBuffer::Singleton().getPlan(opencl, n, clamdfft_error);
+        //if (fft_error != CL_SUCCESS)
+        if (clamdfft_error != CLFFT_SUCCESS)
+            throw std::runtime_error("Could not create clAmdFFT compute plan.");
 
         // Run the fft in OpenCL :)
         // fft kernel needs to have read/write access to output data
+
+        // clAmdFft client code:
+        /*
+        OPENCL_V_THROW( clAmdFftEnqueueTransform( plHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, &outEvent,
+                                                  &clMemBuffersIn[ 0 ], BuffersOut, clMedBuffer ),
+                       "clAmdFftEnqueueTransform failed" );
+        */
+
+		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
+		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+
+        clamdfft_error = clAmdFftEnqueueTransform(
+                plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
+				&clMemBuffersIn[0], &clMemBuffersOut[0],
+                NULL );
+
+        // old clFFT code:
+
+        /*
         fft_error |= clFFT_ExecuteInterleaved(
                 opencl->getCommandQueue(),
                 plan, 1, (clFFT_Direction)direction,
                 OpenClMemoryStorage::ReadOnly<1>( input ).ptr(),
                 OpenClMemoryStorage::ReadWrite<1>( output ).ptr(),
                 0, NULL, NULL );
+        */
 
-        if (fft_error != CL_SUCCESS)
+        //if (fft_error != CL_SUCCESS)
+        if (clamdfft_error != CLFFT_SUCCESS)
             throw std::runtime_error("Bad stuff happened during FFT computation.");
     }
 }
 
 
-void FftClFft::
+void FftClAmdFft::
         computeR2C( DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output )
 {
+	/*
     unsigned denseWidth = output->size().width;
     unsigned redundantWidth = input->size().width;
 
@@ -83,13 +128,14 @@ void FftClFft::
         for (x=0; x<denseWidth; ++x)
             out[x] = in[x];
     }
+	*/
 }
 
 
-void FftClFft::
+void FftClAmdFft::
         computeC2R( Tfr::ChunkData::Ptr input, DataStorage<float>::Ptr output )
 {
-    unsigned denseWidth = input->size().width;
+/*    unsigned denseWidth = input->size().width;
     unsigned redundantWidth = output->size().width;
 
     BOOST_ASSERT( denseWidth == redundantWidth/2+1 );
@@ -111,13 +157,15 @@ void FftClFft::
     compute(redundantInput, complexoutput, FftDirection_Inverse);
 
     ::stftDiscardImag( complexoutput, output );
+	*/
 }
 
 
-void FftClFft::
+void FftClAmdFft::
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n, FftDirection direction )
 {
-    TaskTimer tt("Stft::computeWithClFft( matrix[%d, %d], %s )",
+	/*
+    TaskTimer tt("Stft::compute( matrix[%d, %d], %s )",
                  input->size().width,
                  input->size().height,
                  direction==FftDirection_Forward?"forward":"backward");
@@ -146,12 +194,14 @@ void FftClFft::
         if(fft_error != CL_SUCCESS)
             throw std::runtime_error("Bad stuff happened during FFT computation.");
     }
+	*/
 }
 
 
-void FftClFft::
+void FftClAmdFft::
         compute(DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n )
 {
+	/*
     unsigned denseWidth = n.width/2+1;
 
     BOOST_ASSERT( output->numberOfElements()/denseWidth == n.height );
@@ -177,12 +227,14 @@ void FftClFft::
         for (x=0; x<denseWidth; ++x)
             out[i*denseWidth + x] = in[i*n.width + x];
     }
+	*/
 }
 
 
-void FftClFft::
+void FftClAmdFft::
         inverse(Tfr::ChunkData::Ptr input, DataStorage<float>::Ptr output, DataStorageSize n )
 {
+	/*
     unsigned denseWidth = n.width/2+1;
     unsigned redundantWidth = n.width;
     unsigned batchcount1 = output->numberOfElements()/redundantWidth,
@@ -215,6 +267,7 @@ void FftClFft::
     ::stftDiscardImag( complexoutput, output );
 
     TIME_STFT ComputationSynchronize();
+	*/
 }
 
 

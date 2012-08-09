@@ -63,6 +63,7 @@ SOURCES += \
     tools/selections/*.cpp \
     tools/selections/support/*.cpp \
     ui/*.cpp \
+    tfr/fftinstance.cpp
 
 #Windows Icon
 win32:SOURCES += sonicawe.rc \
@@ -166,10 +167,15 @@ CONFIG += $${qtfeatures}tmpdir
 # #######################################################################
 useopencl {
     SOURCES += \
-        tfr/clfft/*.cpp
-
+        #tfr/clfft/*.cpp
+        tfr/clamdfft/*.cpp
     HEADERS += \
-        tfr/clfft/*.h
+        #tfr/clfft/*.h
+        tfr/clamdfft/*.h
+
+    use_amdfft:INCLUDEPATH += ../lib/sonicawe-winlib/clamdfft/include
+    use_amdfft:LIBS += -l../lib/sonicawe-winlib/clamdfft/lib32/import/clAmdFft.Runtime
+    use_amdfft:DEFINES += USE_AMDFFT
 
     CONFIG += $${qtfeatures}opencl
 }
