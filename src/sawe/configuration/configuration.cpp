@@ -665,10 +665,13 @@ bool Configuration::
 void Configuration::
         resetDefaultSettings()
 {
-#ifndef TARGETNAME
+#define DO_EXPAND(VAL)  VAL ## 1
+#define EXPAND(VAL)     DO_EXPAND(VAL)
+
+#if !defined(TARGETNAME) || (EXPAND(TARGETNAME) == 1)
     QSettings().setValue("target","");
 #else
-    QSettings().setValue("target",##TARGETNAME);
+    QSettings().setValue("target",TOSTR(TARGETNAME));
 #endif
 }
 

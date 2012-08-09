@@ -18,7 +18,7 @@ LIBS += \
     -lhdf5 -lhdf5_hl \
     -L../lib/gpumisc -lgpumisc
 
-QMAKE_LFLAGS += -Wl,-rpath=/opt/muchdifferent/sonicawe/
+QMAKE_LFLAGS += -Wl,-rpath=\'\$\${ORIGIN}\'
 }
 
 macx {
@@ -42,20 +42,22 @@ INCLUDEPATH += \
 	../lib/sonicawe-winlib/portaudio/include \
 	../lib/sonicawe-winlib/libsndfile/include \
 	../lib/sonicawe-winlib/hdf5lib/include \
-	../lib/sonicawe-winlib/zlib/include \
-	../lib/sonicawe-winlib
+        ../lib/sonicawe-winlib/zlib/include \
+        ../lib/sonicawe-winlib/omp \
+        ../lib/sonicawe-winlib
 LIBS += \
 	-l../lib/sonicawe-winlib/glut/glut32 \
 	-l../lib/sonicawe-winlib/glew/lib/glew32 \
 	-l../lib/sonicawe-winlib/libsndfile/libsndfile-1 \
 	-l../lib/sonicawe-winlib/hdf5lib/dll/hdf5dll \
 	-l../lib/sonicawe-winlib/hdf5lib/dll/hdf5_hldll \
-	-L../lib/sonicawe-winlib/boostlib
+        -L../lib/sonicawe-winlib/boostlib \
+        -L../lib/sonicawe-winlib/omp \
+        ../lib/sonicawe-winlib/portaudio/portaudio.lib \
 
-win32:QMAKE_LFLAGS_RELEASE += \
-	../lib/sonicawe-winlib/portaudio/portaudio.lib \
-	../lib/sonicawe-winlib/portaudio/portaudiocpp_mt.lib
-win32:QMAKE_LFLAGS_DEBUG += \
-	../lib/sonicawe-winlib/portaudio/portaudio.lib \
-	../lib/sonicawe-winlib/portaudio/portaudiocpp_mt_gd.lib
+CONFIG(debug, debug|release): LIBS += \
+        ../lib/sonicawe-winlib/portaudio/portaudiocpp_mt_gd.lib
+else: LIBS += \
+        ../lib/sonicawe-winlib/portaudio/portaudiocpp_mt.lib
+
 }
