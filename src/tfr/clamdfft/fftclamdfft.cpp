@@ -270,6 +270,40 @@ void FftClAmdFft::
 	*/
 }
 
+unsigned FftClAmdfft::
+        lChunkSizeS(unsigned x, unsigned multiple)
+{
+    // It's faster but less flexible to only accept powers of 2
+    //return lpo2s(x);
+
+    multiple = std::max(1u, multiple);
+    BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
+
+    unsigned bases[]={2, 3, 5};
+    unsigned a[]={0, 0, 0};
+    unsigned N_bases = 3; // could limit to 2 bases
+    unsigned x2 = multiple*findLargestSmaller(bases, a, 0, int_div_ceil(x, multiple), 0, N_bases);
+    BOOST_ASSERT( x2 < x );
+    return x2;
+}
+
+
+unsigned FftClAmdfft::
+        sChunkSizeG(unsigned x, unsigned multiple)
+{
+    // It's faster but less flexible to only accept powers of 2
+    //return spo2g(x);
+
+    multiple = std::max(1u, multiple);
+    BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
+
+    unsigned bases[]={2, 3, 5};
+    unsigned a[]={0, 0, 0};
+    unsigned N_bases = 3;
+    unsigned x2 = multiple*findSmallestGreater(bases, a, 0, x/multiple, 0, N_bases);
+    BOOST_ASSERT( x2 > x );
+    return x2;
+}
 
 } // namespace Tfr
 #endif // #ifdef USE_OPENCL
