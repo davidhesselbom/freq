@@ -89,12 +89,14 @@ void FftClAmdFft:: // Once
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
 		}
 		
-		clamdfft_error = clAmdFftEnqueueTransform(
+        {
+            TIME_STFT TaskTimer tt5("Running clAmdFft for (n=%u)", n);
+            clamdfft_error = clAmdFftEnqueueTransform(
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
 				&clMemBuffersIn[0], &clMemBuffersOut[0],
                 NULL );
-
-
+            //clFinish(opencl->getCommandQueue());
+        }
 
 
         // old clFFT code:
