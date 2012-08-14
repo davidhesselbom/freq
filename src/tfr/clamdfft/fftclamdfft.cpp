@@ -5,6 +5,8 @@
 #include "tfr/stftkernel.h"
 #include "tfr/complexbuffer.h"
 
+#include "neat_math.h"
+
 #include "fftclamdfft.h"
 #include "openclcontext.h"
 #include "cpumemorystorage.h"
@@ -28,6 +30,8 @@ FftClAmdFft::FftClAmdFft()
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not init setupdata for clAmdFFT.");
 
+    setupData->debugFlags	|= CLFFT_DUMP_PROGRAMS;
+
     error = clAmdFftSetup( setupData.get( ) );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not setup clAmdFFT.");
@@ -40,7 +44,7 @@ FftClAmdFft::~FftClAmdFft()
         throw std::runtime_error("Could not tear down clAmdFFT.");
 }
 
-void FftClAmdFft::
+void FftClAmdFft:: // Once
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction )
 {
     TIME_STFT TaskTimer tt("Fft AmdClFft");
@@ -78,10 +82,20 @@ void FftClAmdFft::
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
-        clamdfft_error = clAmdFftEnqueueTransform(
+		
+	    clAmdFftSetPlanBatchSize(plan, 1);
+		{
+			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
+			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+		}
+		
+		clamdfft_error = clAmdFftEnqueueTransform(
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
 				&clMemBuffersIn[0], &clMemBuffersOut[0],
                 NULL );
+
+
+
 
         // old clFFT code:
 
@@ -97,6 +111,8 @@ void FftClAmdFft::
         //if (fft_error != CL_SUCCESS)
         if (clamdfft_error != CLFFT_SUCCESS)
             throw std::runtime_error("Bad stuff happened during FFT computation.");
+
+        clFinish(opencl->getCommandQueue());
     }
 }
 
@@ -161,9 +177,46 @@ void FftClAmdFft::
 }
 
 
-void FftClAmdFft::
+void FftClAmdFft:: //Batch
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n, FftDirection direction )
-{
+{    
+    TIME_STFT TaskTimer tt2("Fft AmdClFft");
+
+    unsigned s = input->size().width;
+    unsigned S = input->size().width;
+
+    BOOST_ASSERT( output->numberOfBytes() == input->numberOfBytes() );
+
+    clAmdFftDirection dir = ((direction == FftDirection_Forward) ? CLFFT_FORWARD : CLFFT_BACKWARD);
+
+    TIME_STFT TaskTimer tt("Computing fft(N=%u, n=%u, direction=%d, batches=%u)", S, s, direction, n.height);
+    OpenCLContext *opencl = &OpenCLContext::Singleton();
+    clAmdFftStatus clamdfft_error;
+
+    clAmdFftPlanHandle plan = CLAMDFFTKernelBuffer::Singleton().getPlan(opencl, s, clamdfft_error);
+    if (clamdfft_error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not create clAmdFFT compute plan.");
+
+    cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
+    cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+
+
+    clAmdFftSetPlanBatchSize(plan, n.height);
+
+	{
+		TIME_STFT TaskTimer tt5("Baking plan for multibatch");
+		clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+	}
+
+
+    clamdfft_error = clAmdFftEnqueueTransform(
+            plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
+            &clMemBuffersIn[0], &clMemBuffersOut[0],
+            NULL );
+
+    if (clamdfft_error != CLFFT_SUCCESS)
+        throw std::runtime_error("Bad stuff happened during FFT computation.");
+
 	/*
     TaskTimer tt("Stft::compute( matrix[%d, %d], %s )",
                  input->size().width,
@@ -198,7 +251,7 @@ void FftClAmdFft::
 }
 
 
-void FftClAmdFft::
+void FftClAmdFft:: //R2C
         compute(DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n )
 {
 	/*
@@ -270,7 +323,65 @@ void FftClAmdFft::
 	*/
 }
 
-unsigned FftClAmdfft::
+
+unsigned powerprod(const unsigned*bases, const unsigned*b, unsigned N)
+{
+    unsigned v = 1;
+    for (unsigned i=0; i<N; i++)
+        for (unsigned x=0; x<b[i]; x++)
+            v*=bases[i];
+    return v;
+}
+
+
+unsigned findLargestSmaller(const unsigned* bases, unsigned* a, unsigned maxv, unsigned x, unsigned n, unsigned N)
+{
+    unsigned i = 0;
+    while(true)
+    {
+        a[n] = i;
+
+        unsigned v = powerprod(bases, a, N);
+        if (v >= x)
+            break;
+
+        if (n+1<N)
+            maxv = findLargestSmaller(bases, a, maxv, x, n+1, N);
+        else if (v > maxv)
+            maxv = v;
+
+        ++i;
+    }
+    a[n] = 0;
+
+    return maxv;
+}
+
+
+unsigned findSmallestGreater(const unsigned* bases, unsigned* a, unsigned minv, unsigned x, unsigned n, unsigned N)
+{
+    unsigned i = 0;
+    while(true)
+    {
+        a[n] = i;
+
+        unsigned v = powerprod(bases, a, N);
+        if (n+1<N)
+            minv = findSmallestGreater(bases, a, minv, x, n+1, N);
+        else if (v > x && (v < minv || minv==0))
+            minv = v;
+
+        if (v > x)
+            break;
+
+        ++i;
+    }
+    a[n] = 0;
+
+    return minv;
+}
+
+unsigned FftClAmdFft::
         lChunkSizeS(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
@@ -288,7 +399,7 @@ unsigned FftClAmdfft::
 }
 
 
-unsigned FftClAmdfft::
+unsigned FftClAmdFft::
         sChunkSizeG(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
