@@ -44,12 +44,18 @@ void FftClFft::
 
         // Run the fft in OpenCL :)
         // fft kernel needs to have read/write access to output data
-        fft_error |= clFFT_ExecuteInterleaved(
+		{
+	        TIME_STFT TaskTimer tt("Executing fft(N=%u)", N);
+
+	        fft_error |= clFFT_ExecuteInterleaved(
                 opencl->getCommandQueue(),
                 plan, 1, (clFFT_Direction)direction,
                 OpenClMemoryStorage::ReadOnly<1>( input ).ptr(),
                 OpenClMemoryStorage::ReadWrite<1>( output ).ptr(),
                 0, NULL, NULL );
+
+			clFinish(opencl->getCommandQueue());
+		}
 
         if (fft_error != CL_SUCCESS)
             throw std::runtime_error("Bad stuff happened during FFT computation.");

@@ -30,7 +30,7 @@ FftClAmdFft::FftClAmdFft()
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not init setupdata for clAmdFFT.");
 
-    setupData->debugFlags	|= CLFFT_DUMP_PROGRAMS;
+    //setupData->debugFlags	|= CLFFT_DUMP_PROGRAMS;
 
     error = clAmdFftSetup( setupData.get( ) );
     if (error != CLFFT_SUCCESS)
@@ -80,20 +80,21 @@ void FftClAmdFft:: // Once
         */
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
-		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
 		
-	    clAmdFftSetPlanBatchSize(plan, 1);
+//	    clAmdFftSetPlanBatchSize(plan, 1);
 		{
 			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+            //clFinish(opencl->getCommandQueue());
 		}
 		
         {
             TIME_STFT TaskTimer tt5("Running clAmdFft for (n=%u)", n);
             clamdfft_error = clAmdFftEnqueueTransform(
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
-				&clMemBuffersIn[0], &clMemBuffersOut[0],
+				&clMemBuffersIn[0], NULL, //&clMemBuffersOut[0],
                 NULL );
             //clFinish(opencl->getCommandQueue());
         }
