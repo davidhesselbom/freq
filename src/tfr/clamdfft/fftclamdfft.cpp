@@ -17,8 +17,8 @@
 
 #include "clAmdFft.h"
 
-#define TIME_STFT
-//#define TIME_STFT if(0)
+//#define TIME_STFT
+#define TIME_STFT if(0)
 
 
 namespace Tfr {
@@ -30,6 +30,7 @@ FftClAmdFft::FftClAmdFft()
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not init setupdata for clAmdFFT.");
 
+    // Dump kernels to file; useless if they can't be loaded anyway
     //setupData->debugFlags	|= CLFFT_DUMP_PROGRAMS;
 
     error = clAmdFftSetup( setupData.get( ) );
@@ -80,23 +81,26 @@ void FftClAmdFft:: // Once
         */
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
-		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
-		
-//	    clAmdFftSetPlanBatchSize(plan, 1);
+        //if (clAmdFftGetPlanBatchSize(plan) != 1)
+        //{
+        //    clAmdFftSetPlanBatchSize(plan, 1);
+        //}
 		{
 			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
-            //clFinish(opencl->getCommandQueue());
+            clFinish(opencl->getCommandQueue());
 		}
 		
         {
             TIME_STFT TaskTimer tt5("Running clAmdFft for (n=%u)", n);
             clamdfft_error = clAmdFftEnqueueTransform(
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
-				&clMemBuffersIn[0], NULL, //&clMemBuffersOut[0],
+				&clMemBuffersIn[0],
+				&clMemBuffersOut[0],
                 NULL );
-            //clFinish(opencl->getCommandQueue());
+            clFinish(opencl->getCommandQueue());
         }
 
 
@@ -123,22 +127,23 @@ void FftClAmdFft:: // Once
 void FftClAmdFft::
         computeR2C( DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output )
 {
-	/*
-    unsigned denseWidth = output->size().width;
+ /*   unsigned denseWidth = output->size().width;
     unsigned redundantWidth = input->size().width;
 
-   BOOST_ASSERT( denseWidth == redundantWidth/2+1 );
+   //BOOST_ASSERT( denseWidth == redundantWidth/2+1 );
 
+   error = clAmdFftSetLayout(plan, CLFFT_REAL, CLFFT_HERMITIAN_INTERLEAVED);
     // interleave input to complex data
+   /*
    Tfr::ChunkData::Ptr complexinput( new Tfr::ChunkData( input->size()));
    ::stftToComplex( input, complexinput );
 
     // make room for full output
     Tfr::ChunkData::Ptr redundantOutput( new Tfr::ChunkData( redundantWidth ));
-
+*/
     // compute
-    compute(complexinput, redundantOutput, FftDirection_Forward);
-
+    //compute(complexinput, redundantOutput, FftDirection_Forward);
+/*
     // discard redundant output
     {
         Tfr::ChunkElement* in = CpuMemoryStorage::ReadOnly<1>( redundantOutput ).ptr();
@@ -149,7 +154,6 @@ void FftClAmdFft::
     }
 	*/
 }
-
 
 void FftClAmdFft::
         computeC2R( Tfr::ChunkData::Ptr input, DataStorage<float>::Ptr output )
@@ -183,7 +187,8 @@ void FftClAmdFft::
 void FftClAmdFft:: //Batch
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n, FftDirection direction )
 {    
-    TIME_STFT TaskTimer tt2("Fft AmdClFft");
+    /*
+	TIME_STFT TaskTimer tt2("Fft AmdClFft");
 
     unsigned s = input->size().width;
     unsigned S = input->size().width;
@@ -203,14 +208,15 @@ void FftClAmdFft:: //Batch
     cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
     cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
-
-    clAmdFftSetPlanBatchSize(plan, n.height);
+    (if clAmdFftGetPlanBatchSize(plan) != n.height)
+    {
+        clAmdFftSetPlanBatchSize(plan, n.height);
+    }
 
 	{
-		TIME_STFT TaskTimer tt5("Baking plan for multibatch");
+        TIME_STFT TaskTimer tt5("Baking plan of %u for batch of %u", S, n.height);
 		clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
 	}
-
 
     clamdfft_error = clAmdFftEnqueueTransform(
             plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,

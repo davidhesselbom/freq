@@ -51,13 +51,17 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
         //Default: Batch Size 1, single precision, scaling 1.0 forward, 1.0 / P backward,
         //inplace, complex interleaved input and output, strides same for output and input.
     //The defaults, explicitly - it is not recommended by AMD to rely on defaults.
-    //One of the calls below crash the program, however, so commented out for now.
+    //One of the calls below crashes the program, however, so commented out for now.
 /*
 	error = clAmdFftSetPlanBatchSize(plan, 1);
     error = clAmdFftSetPlanPrecision(plan, CLFFT_SINGLE); //CLFFT_SINGLE_FAST not yet supported
     error = clAmdFftSetPlanScale(plan, CLFFT_FORWARD, 1);
     error = clAmdFftSetPlanScale(plan, CLFFT_BACKWARD, 1.0f/n);
-    error = clAmdFftSetResultLocation(plan, CLFFT_INPLACE);
+	*/
+#if !defined(FFTINPLACE)
+    error = clAmdFftSetResultLocation(plan, CLFFT_OUTOFPLACE);
+#endif
+	/*
     error = clAmdFftSetLayout(plan, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
     error = clAmdFftSetPlanInStride(plan, CLFFT_1D, clLengths);
     error = clAmdFftSetPlanOutStride(plan, CLFFT_1D, clLengths);

@@ -15,8 +15,8 @@
 
 #include "clFFT.h"
 
-#define TIME_STFT
-//#define TIME_STFT if(0)
+//#define TIME_STFT
+#define TIME_STFT if(0)
 
 
 namespace Tfr {
@@ -50,7 +50,7 @@ void FftClFft::
 	        fft_error |= clFFT_ExecuteInterleaved(
                 opencl->getCommandQueue(),
                 plan, 1, (clFFT_Direction)direction,
-                OpenClMemoryStorage::ReadOnly<1>( input ).ptr(),
+                OpenClMemoryStorage::ReadWrite<1>( input ).ptr(),
                 OpenClMemoryStorage::ReadWrite<1>( output ).ptr(),
                 0, NULL, NULL );
 
