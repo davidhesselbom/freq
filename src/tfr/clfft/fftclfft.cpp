@@ -42,6 +42,9 @@ void FftClFft::
         if (fft_error != CL_SUCCESS)
             throw std::runtime_error("Could not create clFFT compute plan.");
 
+		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
+		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+
         // Run the fft in OpenCL :)
         // fft kernel needs to have read/write access to output data
 		{
@@ -50,9 +53,9 @@ void FftClFft::
 	        fft_error |= clFFT_ExecuteInterleaved(
                 opencl->getCommandQueue(),
                 plan, 1, (clFFT_Direction)direction,
-                OpenClMemoryStorage::ReadWrite<1>( input ).ptr(),
-                OpenClMemoryStorage::ReadWrite<1>( output ).ptr(),
-                0, NULL, NULL );
+				clMemBuffersIn[0],
+				clMemBuffersOut[0],
+				0, NULL, NULL );
 
 			clFinish(opencl->getCommandQueue());
 		}
