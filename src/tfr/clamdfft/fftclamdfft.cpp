@@ -82,7 +82,6 @@ void FftClAmdFft:: // Once
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
-
         //if (clAmdFftGetPlanBatchSize(plan) != 1)
         //{
         //    clAmdFftSetPlanBatchSize(plan, 1);
@@ -94,13 +93,26 @@ void FftClAmdFft:: // Once
 		}
 		
         {
+			cl_event outEvent = NULL;
+			cl_ulong startTime, endTime;
+
             TIME_STFT TaskTimer tt5("Running clAmdFft for (n=%u)", n);
             clamdfft_error = clAmdFftEnqueueTransform(
-                plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, NULL,
+                plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
 				&clMemBuffersIn[0],
 				&clMemBuffersOut[0],
                 NULL );
             clFinish(opencl->getCommandQueue());
+
+			clGetEventProfilingInfo(outEvent, CL_PROFILING_COMMAND_START, 
+				 sizeof(cl_ulong), &startTime, NULL);
+
+			clGetEventProfilingInfo(outEvent,  CL_PROFILING_COMMAND_END,
+				 sizeof(cl_ulong), &endTime, NULL);
+
+			cl_ulong kernelExecTimeNs = endTime-startTime;
+            TaskTimer tt6("Took %uns to run kernel.", kernelExecTimeNs);
+
         }
 
 
@@ -412,7 +424,7 @@ unsigned FftClAmdFft::
         sChunkSizeG(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
-    //return spo2g(x);
+    return spo2g(x);
 
     multiple = std::max(1u, multiple);
     BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));

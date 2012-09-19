@@ -181,7 +181,7 @@ clFFT_ExecuteInterleaved( cl_command_queue queue, clFFT_Plan Plan, cl_int batchS
 			err |= clSetKernelArg(kernelInfo->kernel, 2, sizeof(cl_int), &dir);
 			err |= clSetKernelArg(kernelInfo->kernel, 3, sizeof(cl_int), &s);
 			
-			err |= clEnqueueNDRangeKernel(queue,  kernelInfo->kernel, 1, NULL, &gWorkItems, &lWorkItems, 0, NULL, NULL);
+			err |= clEnqueueNDRangeKernel(queue,  kernelInfo->kernel, 1, NULL, &gWorkItems, &lWorkItems, 0, NULL, event);
 			if(err)
 				return err;
 			
@@ -204,7 +204,7 @@ clFFT_ExecuteInterleaved( cl_command_queue queue, clFFT_Plan Plan, cl_int batchS
 		    err |= clSetKernelArg(kernelInfo->kernel, 2, sizeof(cl_int), &dir);
 		    err |= clSetKernelArg(kernelInfo->kernel, 3, sizeof(cl_int), &s);
 		
-		    err |= clEnqueueNDRangeKernel(queue,  kernelInfo->kernel, 1, NULL, &gWorkItems, &lWorkItems, 0, NULL, NULL);
+		    err |= clEnqueueNDRangeKernel(queue,  kernelInfo->kernel, 1, NULL, &gWorkItems, &lWorkItems, 0, NULL, event);
 		    if(err)
 			    return err;		
 			

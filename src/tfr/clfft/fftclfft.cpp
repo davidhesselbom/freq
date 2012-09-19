@@ -50,14 +50,26 @@ void FftClFft::
 		{
 	        TIME_STFT TaskTimer tt("Executing fft(N=%u)", N);
 
+			cl_event outEvent = NULL;
+			cl_ulong startTime, endTime;
+
 	        fft_error |= clFFT_ExecuteInterleaved(
                 opencl->getCommandQueue(),
                 plan, 1, (clFFT_Direction)direction,
 				clMemBuffersIn[0],
 				clMemBuffersOut[0],
-				0, NULL, NULL );
+				0, NULL, &outEvent );
 
 			clFinish(opencl->getCommandQueue());
+			
+			clGetEventProfilingInfo(outEvent, CL_PROFILING_COMMAND_START, 
+				 sizeof(cl_ulong), &startTime, NULL);
+
+			clGetEventProfilingInfo(outEvent,  CL_PROFILING_COMMAND_END,
+				 sizeof(cl_ulong), &endTime, NULL);
+
+			cl_ulong kernelExecTimeNs = endTime-startTime;
+            TaskTimer tt6("Took %uns to run kernel.", kernelExecTimeNs);
 		}
 
         if (fft_error != CL_SUCCESS)
