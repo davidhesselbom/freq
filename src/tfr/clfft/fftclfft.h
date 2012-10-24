@@ -13,6 +13,9 @@ namespace Tfr {
         void compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n, FftDirection direction );
         void compute( DataStorage<float>::Ptr inputbuffer, Tfr::ChunkData::Ptr transform_data, DataStorageSize n );
         void inverse( Tfr::ChunkData::Ptr inputdata, DataStorage<float>::Ptr outputdata, DataStorageSize n );
+
+        cl_ulong kernelExecTime;
+        cl_ulong getKernelExecTime() { return kernelExecTime; }
     };
 }
 

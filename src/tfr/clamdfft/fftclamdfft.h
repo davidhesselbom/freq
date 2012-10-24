@@ -19,6 +19,9 @@ namespace Tfr {
 
         unsigned sChunkSizeG(unsigned x, unsigned multiple=1);
         unsigned lChunkSizeS(unsigned x, unsigned multiple=1);
+
+        long long kernelExecTime;
+		long long getKernelExecTime() { return kernelExecTime; }
     };
 }
 

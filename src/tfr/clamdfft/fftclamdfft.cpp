@@ -40,6 +40,7 @@ FftClAmdFft::FftClAmdFft()
 
 FftClAmdFft::~FftClAmdFft()
 {
+	TaskInfo ti("Doing clAmdFftTeardown");
     clAmdFftStatus error = clAmdFftTeardown( );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not tear down clAmdFFT.");
@@ -88,7 +89,7 @@ void FftClAmdFft:: // Once
         //}
 		{
 			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
-			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+			//clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
             clFinish(opencl->getCommandQueue());
 		}
 		
@@ -102,6 +103,11 @@ void FftClAmdFft:: // Once
 				&clMemBuffersIn[0],
 				&clMemBuffersOut[0],
                 NULL );
+            clamdfft_error = clAmdFftEnqueueTransform(
+                plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
+				&clMemBuffersIn[0],
+				&clMemBuffersOut[0],
+                NULL );
             clFinish(opencl->getCommandQueue());
 
 			clGetEventProfilingInfo(outEvent, CL_PROFILING_COMMAND_START, 
@@ -110,9 +116,7 @@ void FftClAmdFft:: // Once
 			clGetEventProfilingInfo(outEvent,  CL_PROFILING_COMMAND_END,
 				 sizeof(cl_ulong), &endTime, NULL);
 
-			cl_ulong kernelExecTimeNs = endTime-startTime;
-            TaskTimer tt6("Took %uns to run kernel.", kernelExecTimeNs);
-
+            kernelExecTime = endTime-startTime;
         }
 
 

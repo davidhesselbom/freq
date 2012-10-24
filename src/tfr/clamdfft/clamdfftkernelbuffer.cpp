@@ -5,12 +5,13 @@
 
 CLAMDFFTKernelBuffer::CLAMDFFTKernelBuffer()
 {
-
+	TaskInfo("%s", __FUNCTION__);
 }
 
 
 CLAMDFFTKernelBuffer::~CLAMDFFTKernelBuffer()
 {
+	TaskInfo("%s", __FUNCTION__);
     // Don't try to clean up, let ClAmdFft take care of it.
 	/* 
     for (PlanMap::iterator i=kernels.begin(); i!=kernels.end(); ++i)
@@ -23,6 +24,8 @@ CLAMDFFTKernelBuffer::~CLAMDFFTKernelBuffer()
 
 clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int n, clAmdFftStatus& error)
 {
+	TaskInfo("%s n=%u", __FUNCTION__, n);
+
     if (kernels.find(n) != kernels.end())
     {
         error = CLFFT_SUCCESS;
@@ -46,7 +49,7 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     else
 #endif
     {
-        TaskTimer tt("Creating an OpenCL AMD FFT compute plan for n=%u", n);
+        //TaskTimer tt("Creating an OpenCL AMD FFT compute plan for n=%u", n);
         error = clAmdFftCreateDefaultPlan(&plan, c->getContext(), CLFFT_1D, clLengths);
         //Default: Batch Size 1, single precision, scaling 1.0 forward, 1.0 / P backward,
         //inplace, complex interleaved input and output, strides same for output and input.

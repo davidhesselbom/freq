@@ -2,7 +2,6 @@
 
 #include <stdexcept>
 #include "tfr/stft.h"
-#include "fftclfft.h"
 #include "tfr/stftkernel.h"
 #include "openclcontext.h"
 
@@ -14,6 +13,8 @@
 #include "clfftkernelbuffer.h"
 
 #include "clFFT.h"
+
+#include "fftclfft.h"
 
 //#define TIME_STFT
 #define TIME_STFT if(0)
@@ -68,8 +69,7 @@ void FftClFft::
 			clGetEventProfilingInfo(outEvent,  CL_PROFILING_COMMAND_END,
 				 sizeof(cl_ulong), &endTime, NULL);
 
-			cl_ulong kernelExecTimeNs = endTime-startTime;
-            TaskTimer tt6("Took %uns to run kernel.", kernelExecTimeNs);
+            kernelExecTime = endTime-startTime;
 		}
 
         if (fft_error != CL_SUCCESS)
