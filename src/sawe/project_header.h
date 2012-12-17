@@ -13,13 +13,16 @@
 #endif
 
 // Sonic AWE
+#include "sawe/project.h"
+
+#ifndef NOGUI
 #include "heightmap/collection.h"
 #include "heightmap/renderer.h"
-#include "sawe/project.h"
 #include "tfr/cwtfilter.h"
 #include "tfr/stftfilter.h"
 #include "tools/rendercontroller.h"
 #include "ui/mainwindow.h"
+#endif
 
 // gpumisc
 #include <TaskTimer.h>
@@ -28,9 +31,11 @@
 #endif
 
 // Qt
+#ifndef NOGUI
 #include <QDockWidget>
 #include <QWheelEvent>
 #include <QHBoxLayout>
+#endif
 
 // boost
 #include <boost/archive/binary_iarchive.hpp> 

@@ -6,6 +6,7 @@
 CLAMDFFTKernelBuffer::CLAMDFFTKernelBuffer()
 {
 	TaskInfo("%s", __FUNCTION__);
+	kernel = NULL;
 }
 
 
@@ -21,10 +22,26 @@ CLAMDFFTKernelBuffer::~CLAMDFFTKernelBuffer()
 	*/
 }
 
+void CLAMDFFTKernelBuffer::clearPlans(OpenCLContext* c)
+{
+	for (PlanMap::iterator i=kernels.begin(); i!=kernels.end(); ++i)
+	{
+        clAmdFftDestroyPlan(&(i->second));
+	}
+	kernels.clear();
+}
 
 clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int n, clAmdFftStatus& error)
 {
 	TaskInfo("%s n=%u", __FUNCTION__, n);
+	size_t clLengths[] = { n, 1, 1 };
+
+	if (kernel != NULL)
+	{
+        error = clAmdFftSetPlanLength(kernel, CLFFT_1D, clLengths);
+		if (error == CLFFT_SUCCESS)
+			return kernel;
+	}
 
     if (kernels.find(n) != kernels.end())
     {
@@ -36,7 +53,6 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
 
     //clFFT_Dim3 ndim = { n, 1, 1 };
     //clFFT_Plan plan = clFFT_CreatePlan(c, ndim, clFFT_1D, clFFT_InterleavedComplexFormat, &error);
-    size_t clLengths[] = { n, 1, 1 };
     clAmdFftPlanHandle plan;
 
 #ifdef COPY_EXISTING_PLAN
@@ -72,7 +88,8 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     }
 
     if (error == CLFFT_SUCCESS)
-        kernels[n] = plan;
+        //kernel = plan;
+		kernels[n] = plan;
 
     //error = clAmdFftBakePlan(plan, 1, &c->getCommandQueue(), NULL, NULL);
 

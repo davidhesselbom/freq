@@ -17,8 +17,8 @@
 
 #include "clAmdFft.h"
 
-//#define TIME_STFT
-#define TIME_STFT if(0)
+#define TIME_STFT
+//#define TIME_STFT if(0)
 
 
 namespace Tfr {
@@ -44,6 +44,53 @@ FftClAmdFft::~FftClAmdFft()
     clAmdFftStatus error = clAmdFftTeardown( );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not tear down clAmdFFT.");
+}
+
+void FftClAmdFft::clearPlans()
+{
+	lastPlan = NULL;
+	OpenCLContext *opencl = &OpenCLContext::Singleton();
+	CLAMDFFTKernelBuffer::Singleton().clearPlans(opencl);
+}
+
+void FftClAmdFft::createPlan(size_t newSize)
+{
+    OpenCLContext *opencl = &OpenCLContext::Singleton();
+	
+	clAmdFftStatus clamdfft_error;
+
+    clAmdFftPlanHandle plan = CLAMDFFTKernelBuffer::Singleton().getPlan(opencl, newSize, clamdfft_error);
+    if (clamdfft_error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not create clAmdFFT compute plan.");
+	lastPlan = plan;
+}
+
+void FftClAmdFft::bake()
+{
+	TIME_STFT TaskTimer tt5("Baking plan for batch... ");
+    OpenCLContext *opencl = &OpenCLContext::Singleton();
+	clAmdFftStatus clamdfft_error;
+	clamdfft_error = clAmdFftBakePlan(lastPlan, 1, &opencl->getCommandQueue(), NULL, NULL);
+	if (clamdfft_error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not create clAmdFFT compute plan.");
+	bakeTime = tt5.elapsedTime();
+}
+
+void FftClAmdFft::setSize(size_t newSize)
+{
+	size_t clLengths[] = { newSize, 1, 1 };
+	clAmdFftStatus clamdfft_error;
+    clamdfft_error = clAmdFftSetPlanLength(lastPlan, CLFFT_1D, clLengths);
+	if (clamdfft_error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not set clAmdFFT plan size.");
+}
+
+void FftClAmdFft::setBatchSize(size_t newBatchSize)
+{
+	clAmdFftStatus clamdfft_error;
+	clamdfft_error = clAmdFftSetPlanBatchSize(lastPlan, newBatchSize);
+	if (clamdfft_error != CLFFT_SUCCESS)
+       throw std::runtime_error("Could not set clAmdFFT plan batch size.");
 }
 
 void FftClAmdFft:: // Once
@@ -83,15 +130,28 @@ void FftClAmdFft:: // Once
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+
         //if (clAmdFftGetPlanBatchSize(plan) != 1)
         //{
         //    clAmdFftSetPlanBatchSize(plan, 1);
         //}
 		{
 			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
-			//clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
             clFinish(opencl->getCommandQueue());
 		}
+
+		size_t tempBufferSize = 0;
+		clAmdFftGetTmpBufSize(plan, &tempBufferSize);
+		tempBufferSize /= 8;
+		std::cout << "tempbuf: " << tempBufferSize << std::endl;
+		ChunkData::Ptr tempBuffer(new ChunkData(tempBufferSize));
+		cl_mem clTempBuffer = NULL;
+		if (tempBufferSize != 0)
+		{
+			clTempBuffer = OpenClMemoryStorage::ReadWrite<1>(tempBuffer).ptr();
+		}
+
 		
         {
 			cl_event outEvent = NULL;
@@ -102,12 +162,12 @@ void FftClAmdFft:: // Once
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
 				&clMemBuffersIn[0],
 				&clMemBuffersOut[0],
-                NULL );
-            clamdfft_error = clAmdFftEnqueueTransform(
-                plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
-				&clMemBuffersIn[0],
-				&clMemBuffersOut[0],
-                NULL );
+                clTempBuffer );
+            //clamdfft_error = clAmdFftEnqueueTransform(
+            //    plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
+			//	&clMemBuffersIn[0],
+			//	&clMemBuffersOut[0],
+            //    NULL );
             clFinish(opencl->getCommandQueue());
 
 			clGetEventProfilingInfo(outEvent, CL_PROFILING_COMMAND_START, 
@@ -117,8 +177,14 @@ void FftClAmdFft:: // Once
 				 sizeof(cl_ulong), &endTime, NULL);
 
             kernelExecTime = endTime-startTime;
+			std::string tempString;
+			std::stringstream ss;
+			ss << kernelExecTime;
+			ss >> tempString;
+			execTimes.push_back(tempString);
         }
-
+		
+		//clamdfft_error = clAmdFftDestroyPlan(&plan);
 
         // old clFFT code:
 
@@ -428,7 +494,7 @@ unsigned FftClAmdFft::
         sChunkSizeG(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
-    return spo2g(x);
+    //return spo2g(x);
 
     multiple = std::max(1u, multiple);
     BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));

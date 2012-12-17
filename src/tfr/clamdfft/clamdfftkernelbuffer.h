@@ -11,10 +11,12 @@ public:
     ~CLAMDFFTKernelBuffer();
 
     clAmdFftPlanHandle getPlan(OpenCLContext *c, unsigned int n, clAmdFftStatus& error);
+	void clearPlans(OpenCLContext* c);
 
 protected:
     typedef std::map<unsigned int, clAmdFftPlanHandle> PlanMap;
     PlanMap kernels;
+	clAmdFftPlanHandle kernel;
 
 private:
     friend class HasSingleton<CLAMDFFTKernelBuffer>;

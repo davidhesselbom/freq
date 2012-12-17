@@ -8,8 +8,8 @@
 #include "TaskTimer.h"
 #include "computationkernel.h"
 
-//#define TIME_STFT
-#define TIME_STFT if(0)
+#define TIME_STFT
+//#define TIME_STFT if(0)
 
 // TODO translate cdft to take floats instead of doubles
 //extern "C" { void cdft(int, int, double *); }
@@ -21,6 +21,7 @@ const bool magicCheck = true;
 
 namespace Tfr {
 
+float wallTime = 0;
 
 void FftOoura::
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction )
@@ -55,8 +56,11 @@ void FftOoura::
 
 
     {
-        TIME_STFT TaskTimer tt("Computing fft(N=%u, n=%u, direction=%d)", N, n, direction);
-        cdft(2*N, direction, &q[0], const_cast<int*>(&ip[0]), const_cast<float*>(&w[0]));
+		int times = (1<<27)/N;
+        TIME_STFT TaskTimer tt("Computing fft(N=%u, n=%u, direction=%d, times=%u)", N, n, direction, times);
+		for (int i = 0; i < times; i++)
+	        cdft(2*N, direction, &q[0], const_cast<int*>(&ip[0]), const_cast<float*>(&w[0]));
+		wallTime = tt.elapsedTime();
     }
 
 
@@ -81,7 +85,8 @@ void FftOoura::
     ::stftToComplex( input, complexinput );
 
     // make room for full output
-    Tfr::ChunkData::Ptr redundantOutput( new Tfr::ChunkData( redundantWidth ));
+
+	Tfr::ChunkData::Ptr redundantOutput( new Tfr::ChunkData( redundantWidth ));
 
     // compute
     compute(complexinput, redundantOutput, FftDirection_Forward);

@@ -22,6 +22,15 @@
 
 namespace Tfr {
 
+void FftClFft::createPlan(unsigned n)
+{
+	OpenCLContext *opencl = &OpenCLContext::Singleton();
+    cl_int fft_error;
+
+    clFFT_Plan plan = CLFFTKernelBuffer::Singleton().getPlan(opencl->getContext(), n, fft_error);
+    if (fft_error != CL_SUCCESS)
+        throw std::runtime_error("Could not create clFFT compute plan.");
+}
 
 void FftClFft::
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction )

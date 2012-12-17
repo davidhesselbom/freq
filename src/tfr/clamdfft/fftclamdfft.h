@@ -2,6 +2,11 @@
 #define FFTCLAMDFFT_H
 
 #include "tfr/fftimplementation.h"
+#include <vector>
+#include <string>
+#include <sstream>
+#include <iostream>
+#include "clAmdFft.h"
 
 namespace Tfr {
     class FftClAmdFft: public FftImplementation {
@@ -21,7 +26,21 @@ namespace Tfr {
         unsigned lChunkSizeS(unsigned x, unsigned multiple=1);
 
         long long kernelExecTime;
+		std::vector<std::string> execTimes;
+		float bakeTime;
+		float getLastBakeTime() { return bakeTime; }
+
+		int getWallExecTime() { return 0; }
 		long long getKernelExecTime() { return kernelExecTime; }
+		
+		void setSize(size_t newSize);
+		void setBatchSize(size_t newBatchSize);
+		void bake();
+
+		void clearPlans();
+		void createPlan(size_t newSize);
+		
+	    clAmdFftPlanHandle lastPlan;
     };
 }
 

@@ -15,9 +15,13 @@ namespace Tfr {
         void compute( DataStorage<float>::Ptr inputbuffer, Tfr::ChunkData::Ptr transform_data, DataStorageSize n );
         void inverse( Tfr::ChunkData::Ptr inputdata, DataStorage<float>::Ptr outputdata, DataStorageSize n );
 
+		float getWallExecTime() { return wallTime; }
+
     private:
         std::vector<float> w;
         std::vector<int> ip;
+		float wallTime;
+
     };
 }
 
