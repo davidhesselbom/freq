@@ -2,6 +2,8 @@
 #define FFTIMPLEMENTATION_H
 
 #include "tfr/chunkdata.h"
+#include "sawe/sawedll.h"
+
 #include <boost/shared_ptr.hpp>
 
 namespace Tfr {
@@ -11,7 +13,7 @@ namespace Tfr {
         FftDirection_Inverse = 1
     };
 
-    class FftImplementation {
+    class SaweDll FftImplementation {
     public:
         typedef boost::shared_ptr<FftImplementation> Ptr;
         // An implementation can optimize itself based on which type of fft that is requested for
