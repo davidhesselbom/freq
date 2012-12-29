@@ -5,6 +5,7 @@ namespace Tfr {
 
 #include "fftooura.h"
 #include "clfft/fftclfft.h"
+#include "clamdfft/fftclamdfft.h"
 #include "fftcufft.h"
 
 #include <boost/make_shared.hpp>
@@ -22,6 +23,8 @@ shared_ptr<FftImplementation> FftImplementation::
 {
 #ifdef USE_CUFFT
     return make_shared<FftCufft>(); // Gpu, Cuda
+#elif defined(USE_AMDFFT)
+    return make_shared<FftClAmdFft>(); // Gpu, OpenCL
 #elif defined(USE_OPENCL)
     return make_shared<FftClFft>(); // Gpu, OpenCL
 #else

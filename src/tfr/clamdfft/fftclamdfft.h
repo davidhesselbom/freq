@@ -6,7 +6,8 @@
 #include <string>
 #include <sstream>
 #include <iostream>
-#include "clAmdFft.h"
+
+typedef size_t clAmdFftPlanHandle;
 
 namespace Tfr {
     class FftClAmdFft: public FftImplementation {
