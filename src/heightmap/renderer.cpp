@@ -58,7 +58,7 @@ Renderer::Renderer( Collection* collection )
     draw_contour_plot(false),
     color_mode( ColorMode_Rainbow ),
     fixed_color( 1,0,0,1 ),
-    clear_color( 1,1,1,1 ),
+    clear_color( 1,1,1,0 ),
     y_scale( 1 ),
     last_ysize( 1 ),
     last_axes_length( 0 ),
@@ -70,6 +70,7 @@ Renderer::Renderer( Collection* collection )
     _mesh_height(0),
     _mesh_fraction_width(1),
     _mesh_fraction_height(1),
+    _shader_prog(0),
     _initialized(NotInitialized),
     _draw_flat(false),
     /*
@@ -108,6 +109,8 @@ Renderer::Renderer( Collection* collection )
         c = 1;
 #endif
     }
+
+    init();
 }
 
 
@@ -143,7 +146,7 @@ void Renderer::setSize( unsigned w, unsigned h)
 }
 
 // create index buffer for rendering quad mesh
-void Renderer::createMeshIndexBuffer(unsigned w, unsigned h)
+void Renderer::createMeshIndexBuffer(int w, int h)
 {
     GlException_CHECK_ERROR();
 
@@ -162,9 +165,9 @@ void Renderer::createMeshIndexBuffer(unsigned w, unsigned h)
 
     std::vector<BLOCKindexType> indicesdata(_vbo_size);
     BLOCKindexType *indices = &indicesdata[0];
-    if (indices) for(unsigned y=0; y<h-1; y++) {
+    if (indices) for(int y=0; y<h-1; y++) {
         *indices++ = y*w;
-        for(unsigned x=0; x<w; x++) {
+        for(int x=0; x<w; x++) {
             *indices++ = y*w+x;
             *indices++ = (y+1)*w+x;
         }
@@ -186,7 +189,7 @@ void Renderer::createMeshIndexBuffer(unsigned w, unsigned h)
 }
 
 // create fixed vertex buffer to store mesh vertices
-void Renderer::createMeshPositionVBO(unsigned w, unsigned h)
+void Renderer::createMeshPositionVBO(int w, int h)
 {
     int y1 = 0, x1 = 0, y2 = h, x2 = w;
 
@@ -447,6 +450,21 @@ void Renderer::
 }
 
 
+void Renderer::
+        clearCaches()
+{
+    _mesh_width = 0;
+    _mesh_height = 0;
+    _initialized = NotInitialized;
+    _mesh_position.reset();
+    glDeleteProgram(_shader_prog);
+    _shader_prog = 0;
+    _invalid_frustum = true;
+    colorTexture.reset();
+    _color_texture_colors = (ColorMode)-1;
+}
+
+
 tvector<4,float> mix(tvector<4,float> a, tvector<4,float> b, float f)
 {
     return a*(1-f) + b*f;
@@ -455,6 +473,8 @@ tvector<4,float> mix(tvector<4,float> a, tvector<4,float> b, float f)
 tvector<4,float> getWavelengthColorCompute( float wavelengthScalar, Renderer::ColorMode scheme ) {
     tvector<4,float> spectrum[12];
     int count = 0;
+    spectrum[0] = tvector<4,float>( 0, 0, 0, 0 );
+
     switch (scheme)
     {
     case Renderer::ColorMode_GreenRed:
@@ -485,6 +505,24 @@ tvector<4,float> getWavelengthColorCompute( float wavelengthScalar, Renderer::Co
         //spectrum[7] = tvector<4,float>( -0.5, -0.5, -0.5, 0 ); // dark line, almost black
         spectrum[7] = tvector<4,float>( 1, 1, 1, 0 ); // darker when over the top
         count = 7;
+        break;
+    case Renderer::ColorMode_Green:
+        if (wavelengthScalar<0)
+            return tvector<4,float>( 0, 0, 0, 0 );
+        spectrum[0] = tvector<4,float>( 0, 0, 0, 0 );
+        spectrum[1] = tvector<4,float>( 0, 0, 0, 0 );
+        spectrum[2] = tvector<4,float>( 0, 1, 0, 0 );
+        spectrum[3] = tvector<4,float>( 0, 1, 0, 0 );
+        spectrum[4] = tvector<4,float>( 0, 1, 0, 0 );
+        spectrum[5] = tvector<4,float>( 0, 1, 0, 0 );
+        spectrum[6] = tvector<4,float>( 0, 1, 0, 0 );
+        count = 6;
+        break;
+    case Renderer::ColorMode_Grayscale:
+        break;
+    case Renderer::ColorMode_BlackGrayscale:
+        if (wavelengthScalar<0)
+            return tvector<4,float>( 0, 0, 0, 0 );
         break;
     default:
         /* for white background */
@@ -544,7 +582,7 @@ tvector<4,float> getWavelengthColorCompute( float wavelengthScalar, Renderer::Co
 }
 
 void Renderer::createColorTexture(unsigned N) {
-    if (_color_texture_colors == color_mode && colorTexture->getWidth()==N)
+    if (_color_texture_colors == color_mode && colorTexture && colorTexture->getWidth()==N)
         return;
 
     _color_texture_colors = color_mode;
@@ -674,10 +712,18 @@ void Renderer::beginVboRendering()
         glUniform1i(uniVertText2, 2); // GL_TEXTURE2
 
         uniFixedColor = glGetUniformLocation(_shader_prog, "fixedColor");
-        if (color_mode == ColorMode_Grayscale)
-            glUniform4f(uniFixedColor, 1.f, 1.f, 1.f, 1.f);
-        else
+        switch (color_mode)
+        {
+        case ColorMode_Grayscale:
+            glUniform4f(uniFixedColor, 0.f, 0.f, 0.f, 0.f);
+            break;
+        case ColorMode_BlackGrayscale:
+            glUniform4f(uniFixedColor, 1.f, 1.f, 1.f, 0.f);
+            break;
+        default:
             glUniform4f(uniFixedColor, fixed_color[0], fixed_color[1], fixed_color[2], fixed_color[3]);
+            break;
+        }
 
         uniClearColor = glGetUniformLocation(_shader_prog, "clearColor");
         glUniform4f(uniClearColor, clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
@@ -688,6 +734,7 @@ void Renderer::beginVboRendering()
         case ColorMode_Rainbow:
         case ColorMode_GreenRed:
         case ColorMode_GreenWhite:
+        case ColorMode_Green:
             glUniform1f(uniColorTextureFactor, 1.f);
             break;
         default:
@@ -780,7 +827,7 @@ void Renderer::renderSpectrogramRef( Reference ref )
             glVertex3f( 1, 0, 1 );
             glVertex3f( 0, 0, 1 );
         glEnd();
-        float y = projectionPlane[1]*.5;
+        float y = projectionPlane[1]*.05;
         glColor4f( 0.2f, 0.8f, 0.8f, 0.5f );
         glBegin(GL_LINE_STRIP);
             glVertex3f( 0, y, 0 );
@@ -1115,7 +1162,7 @@ bool Renderer::
     Region r = ref.getRegion();
     const Position p[2] = { r.a, r.b };
 
-    float y[]={0, projectionPlane[1]*.5};
+    float y[]={0, float(projectionPlane[1]*.5)};
     for (unsigned i=0; i<sizeof(y)/sizeof(y[0]); ++i)
     {
         GLvector corner[]=

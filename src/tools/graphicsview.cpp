@@ -1,8 +1,8 @@
 #include "graphicsview.h"
-#include "renderview.h"
 
-#include <TaskTimer.h>
-#include <demangle.h>
+#include "TaskTimer.h"
+#include "demangle.h"
+#include "exceptionassert.h"
 
 #include <QEvent>
 #include <QTimerEvent>
@@ -18,8 +18,8 @@ namespace Tools
 
 GraphicsView::
         GraphicsView(QGraphicsScene* scene)
-    :   QGraphicsView(scene),
-        pressed_control_(false)
+    :   QGraphicsView(scene)
+//        ,pressed_control_(false)
 {
     setWindowTitle(tr("Sonic AWE"));
     //setRenderHints(QPainter::SmoothPixmapTransform);
@@ -34,20 +34,25 @@ GraphicsView::
     setRenderHints(renderHints() | QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
 
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    // Caching slows down rendering of animated frames.
+    setCacheMode(QGraphicsView::CacheNone);
 
-    tool_proxy_ = new QGraphicsProxyWidget();
-    layout_widget_ = new QWidget();
+    tool_proxy_ = new QGraphicsProxyWidget;
+    layout_widget_ = new QWidget;
 
     // Make all child widgets occupy the entire area
     layout_widget_->setLayout(new QBoxLayout(QBoxLayout::TopToBottom));
     layout_widget_->layout()->setMargin(0);
     layout_widget_->layout()->setSpacing(0);
 
-    tool_proxy_ ->setWidget( layout_widget_ );
-    tool_proxy_ ->setWindowFlags( Qt::FramelessWindowHint | Qt::WindowSystemMenuHint );
+    tool_proxy_->setWidget( layout_widget_ );
+    tool_proxy_->setWindowFlags( Qt::FramelessWindowHint );
+
     setToolFocus( false );
 
-    layout_widget_->setWindowOpacity( 0 );
+    // would prefer WA_NoBackground to hide the background, but some cache (which we're not using) isn't cleared while resizing without more work. Setting alpha to 0 also works
+    //layout_widget_->setAttribute(Qt::WA_NoBackground);
+    layout_widget_->setPalette(QPalette(QPalette::Window, QColor(0,0,0,0)));
 
     scene->addItem( tool_proxy_  );
     tool_proxy_->setParent( scene );
@@ -100,44 +105,44 @@ void GraphicsView::customEvent(QEvent *e){
     DEBUG_EVENTS TaskTimer("GraphicsView customEvent %s info %d", vartype(*e).c_str(), e->isAccepted()).suppressTiming();
 }
 
-void GraphicsView::keyPressEvent(QKeyEvent *event) {
-    if (event->key() != Qt::Key_Shift)
-    {
-        QGraphicsView::keyPressEvent( event );
-        return;
-    }
+//void GraphicsView::keyPressEvent(QKeyEvent *event) {
+//    if (event->key() != Qt::Key_Shift)
+//    {
+//        QGraphicsView::keyPressEvent( event );
+//        return;
+//    }
 
-    pressed_control_ = true;
+//    pressed_control_ = true;
 
-    unsigned u = toolWindows();
-    for (unsigned i=0; i<u; ++i)
-    {
-        Support::ToolSelector* ts = toolSelector(i, 0);
-        ts->temp_tool = ts->currentTool();
-        ts->setCurrentTool( ts->default_tool, true );
-    }
-}
+//    unsigned u = toolWindows();
+//    for (unsigned i=0; i<u; ++i)
+//    {
+//        Support::ToolSelector* ts = toolSelector(i, 0);
+//        ts->temp_tool = ts->currentTool();
+//        ts->setCurrentTool( ts->default_tool, true );
+//    }
+//}
 
-void GraphicsView::keyReleaseEvent(QKeyEvent *event) {
-    if (event->key() != Qt::Key_Shift)
-    {
-        QGraphicsView::keyReleaseEvent( event );
-        return;
-    }
+//void GraphicsView::keyReleaseEvent(QKeyEvent *event) {
+//    if (event->key() != Qt::Key_Shift)
+//    {
+//        QGraphicsView::keyReleaseEvent( event );
+//        return;
+//    }
 
-    if (!pressed_control_ )
-        return;
+//    if (!pressed_control_ )
+//        return;
 
-    pressed_control_ = false;
+//    pressed_control_ = false;
 
-    unsigned u = toolWindows();
-    for (unsigned i=0; i<u; ++i)
-    {
-        Support::ToolSelector* ts = toolSelector(i, 0);
-        ts->setCurrentTool( ts->temp_tool, true );
-        ts->temp_tool = 0;
-    }
-}
+//    unsigned u = toolWindows();
+//    for (unsigned i=0; i<u; ++i)
+//    {
+//        Support::ToolSelector* ts = toolSelector(i, 0);
+//        ts->setCurrentTool( ts->temp_tool, true );
+//        ts->temp_tool = 0;
+//    }
+//}
 
 void GraphicsView::mousePressEvent( QMouseEvent* e )
 {
@@ -184,12 +189,11 @@ Support::ToolSelector* GraphicsView::
 {
     while (index >= layout_widget_->layout()->count())
     {
-        BOOST_ASSERT( state );
+        EXCEPTION_ASSERT( state );
 
         QWidget* parent = new QWidget();
         parent->setLayout(new QVBoxLayout());
         parent->layout()->setMargin(0);
-        parent->setWindowOpacity( 0 );
 
         Support::ToolSelector* tool_selector = new Support::ToolSelector( state, parent );
         tool_selector->setParent( parent );

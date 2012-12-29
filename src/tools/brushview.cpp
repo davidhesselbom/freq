@@ -12,6 +12,7 @@
 
 #include "support/brushfilter.h"
 #include "support/brushpaintkernel.h"
+#include "support/toolglbrush.h"
 
 // Sonic AWE
 #include "tfr/filter.h"
@@ -23,16 +24,13 @@
 #include <math.h>
 #endif
 
-#include <gl.h>
-#include <glPushContext.h>
-
 namespace Tools {
 
 BrushView::
         BrushView(BrushModel* model)
             :
             enabled( false ),
-            gauss( ResamplePos(0,0), ResamplePos(0,0) ),
+            gauss( ResamplePos(0,0), ResamplePos(1,1) ),
             model_( model )
 {
 }
@@ -63,11 +61,7 @@ void BrushView::
         _rz = gauss.sigma().y;
     float y = 1;
 
-    glPushAttribContext ac;
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(false);
-    glColor4f( 0, 0, 0, enabled ? .5 : 0.2);
+    Support::ToolGlBrush tgb(enabled);
 
     glBegin(GL_TRIANGLE_STRIP);
     for (unsigned k=0; k<=360; k++) {
@@ -87,7 +81,6 @@ void BrushView::
     }
     glEnd();
     glLineWidth(0.5f);
-    glDepthMask(true);
 }
 
 } // namespace Tools

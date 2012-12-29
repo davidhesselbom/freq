@@ -4,10 +4,17 @@
 
 #include <boost/foreach.hpp>
 
+
+//#define TIME_OPERATION
+#define TIME_OPERATION if(0)
+
+//#define TIME_OPERATION_LINE(x) TIME(x)
+#define TIME_OPERATION_LINE(x) x
+
+
 namespace Signal {
 
 Operation::Operation(pOperation s )
-//:   _enabled( true ) // TODO remove _enabled
 {
     source( s );
 }
@@ -50,10 +57,10 @@ void Operation::
 }
 
 
-Signal::Intervals Operation::
+Intervals Operation::
         affected_samples()
 {
-    return getInterval();
+    return Intervals::Intervals_ALL;
 }
 
 
@@ -85,69 +92,19 @@ pBuffer Operation::
         read( const Interval& I )
 {
     if (_source && Intervals(I) - zeroed_samples())
+    {
+        TIME_OPERATION TaskTimer tt("%s.%s(%s) from %s",
+                      vartype(*this).c_str(), __FUNCTION__ ,
+                      I.toString().c_str(),
+                      vartype(*_source).c_str());
+
         return _source->read( I );
+    }
 
+    TIME_OPERATION TaskTimer tt("%s.%s(%s) zeros",
+                  vartype(*this).c_str(), __FUNCTION__ ,
+                  I.toString().c_str());
     return zeros(I);
-}
-
-
-pBuffer Operation::
-        readFixedLengthAllChannels( const Interval& I )
-{
-    if (1 >= num_channels())
-        return readFixedLength( I );
-
-    unsigned current_channel = this->get_channel();
-    pBuffer b( new Signal::Buffer(I.first, I.count(), sample_rate(), this->num_channels() ));
-
-    float* dst = b->waveform_data()->getCpuMemory();
-    for (unsigned i=0; i<num_channels(); ++i)
-    {
-        this->set_channel( i );
-        Signal::pBuffer r = readFixedLength( I );
-        float* src = r->waveform_data()->getCpuMemory();
-        memcpy( dst + i*I.count(), src, I.count()*sizeof(float));
-    }
-    this->set_channel( current_channel );
-
-    return b;
-}
-
-
-pBuffer Operation::
-        readAllChannels( const Interval& J )
-{
-    pBuffer b1 = read( J );
-    if (1 >= num_channels())
-        return b1;
-
-    const Interval& I = b1->getInterval();
-
-    const unsigned current_channel = this->get_channel();
-    pBuffer b( new Signal::Buffer(I.first, I.count(), sample_rate(), this->num_channels() ));
-
-    float* dst = b->waveform_data()->getCpuMemory();
-    for (unsigned i=0; i<num_channels(); ++i)
-    {
-        Signal::pBuffer r;
-        if (current_channel==i)
-            r = b1;
-        else
-        {
-            this->set_channel( i );
-            r = readFixedLength( I );
-        }
-
-        float* src = r->waveform_data()->getCpuMemory();
-        unsigned C = r->channels();
-        BOOST_ASSERT( 0 < C );
-        BOOST_ASSERT( i + C <= num_channels() );
-        memcpy( dst + i*I.count(), src, I.count()*C*sizeof(float));
-        i += C - 1;
-    }
-    this->set_channel( current_channel );
-
-    return b;
 }
 
 
@@ -185,6 +142,7 @@ void Operation::
 
     BOOST_FOREACH( Operation* p, _outputs )
     {
+        EXCEPTION_ASSERT( 0 != p );
         p->invalidate_samples( p->translate_interval( I ));
     }
 }
@@ -223,16 +181,16 @@ pOperation Operation::
 }
 
 
-Signal::Intervals Operation::
+Intervals Operation::
         affectedDiff(pOperation source1, pOperation source2)
 {
-    Signal::Intervals new_data( 0, source1->number_of_samples() );
-    Signal::Intervals old_data( 0, source2->number_of_samples() );
-    Signal::Intervals invalid = new_data | old_data;
+    Intervals new_data( 0, source1->number_of_samples() );
+    Intervals old_data( 0, source2->number_of_samples() );
+    Intervals invalid = new_data | old_data;
 
-    Signal::Intervals was_zeros = source1->zeroed_samples_recursive();
-    Signal::Intervals new_zeros = source2->zeroed_samples_recursive();
-    Signal::Intervals still_zeros = was_zeros & new_zeros;
+    Intervals was_zeros = source1->zeroed_samples_recursive();
+    Intervals new_zeros = source2->zeroed_samples_recursive();
+    Intervals still_zeros = was_zeros & new_zeros;
     invalid -= still_zeros;
 
     Intervals affected_samples_until_source2;
@@ -317,13 +275,13 @@ std::string Operation::
 }
 
 
-Signal::Intervals FinalSource::
+Intervals FinalSource::
         zeroed_samples()
 {
     IntervalType N = number_of_samples();
-    Signal::Intervals r = Signal::Intervals::Intervals_ALL;
+    Intervals r = Intervals::Intervals_ALL;
     if (N)
-        r -= Signal::Interval(0, N);
+        r -= Interval(0, N);
     return r;
 }
 

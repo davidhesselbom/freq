@@ -3,12 +3,14 @@
 #include "tfr/cwt.h"
 #include "sawe/reader.h"
 #include "sawe/configuration.h"
+#include "test/unittest.h"
 
 // gpumisc
 #include <redirectstdout.h>
 #include <neat_math.h>
 #include <computationkernel.h>
 #include <ThreadChecker.h>
+#include "exceptionassert.h"
 
 // Qt
 #include <QtGui/QMessageBox>
@@ -33,9 +35,9 @@ using namespace Signal;
 #else
 
 // gpumisc
-#include <CudaProperties.h>
-#include <CudaException.h>
-#include "GpuCpuData.h"
+#include "CudaProperties.h"
+#include "CudaException.h"
+#include "cudaglobalstorage.h"
 
 // cuda
 #include <cuda_gl_interop.h>
@@ -72,8 +74,9 @@ static bool check_cuda( bool use_OpenGL_bindings ) {
 
             CudaException_SAFE_CALL( cudaMalloc( &ptr, 1024 ));
             CudaException_SAFE_CALL( cudaFree( ptr ));
-            GpuCpuData<float> a( 0, make_cudaExtent(1024,1,1), GpuCpuVoidData::CudaGlobal );
-            a.getCudaGlobal();
+
+            DataStorage<float> a( 1024 );
+            CudaGlobalStorage::ReadWrite<float,1>(&a).getCudaPitchedPtr();
 
             size_t free=0, total=0;
             cudaMemGetInfo(&free, &total);
@@ -220,223 +223,14 @@ static bool check_cuda( bool use_OpenGL_bindings ) {
 
 using namespace Signal;
 
-class A
-{
-public:
-    A() { std::cout << __FUNCTION__ << " " << this << std::endl; }
-    virtual ~A() { std::cout << __FUNCTION__ << " " << this << std::endl; }
-
-    int data;
-};
-
-A hej()
-{
-    return A();
-}
-
-class B
-{
-public:
-    virtual ~B() { std::cout << __FUNCTION__ << " " << this << std::endl; }
-    int data2;
-};
-
-class C: public A, public B
-{
-public:
-    virtual ~C() { std::cout << __FUNCTION__ << " " << this << std::endl; }
-    int data3;
-};
-
-void tsta(A*a)
-{
-    std::cout << a << " a " << a->data << std::endl;
-}
-
-void tstb(B*b)
-{
-    std::cout << b << " b " << b->data2 << std::endl;
-}
-void tstc(C*c)
-{
-    std::cout << c << " c " << c->data3 << std::endl;
-}
 
 int main(int argc, char *argv[])
 {
-    if (0)
-    {
-        Tfr::FreqAxis fa;
-        fa.setLinear(1);
-        fa.max_frequency_scalar = 1;
-        fa.min_hz = -20;
-        fa.f_step = -2*fa.min_hz;
+    ExceptionAssert::installEventHandler ();
 
-        for (float f=0; f<=fa.max_frequency_scalar; f+=0.1)
-            cout << f << " " << fa.getFrequency(f) << " Hz" << endl;
+    if (argc == 2 && 0 == strcmp(argv[1],"--test"))
+        return Test::UnitTest::test ();
 
-        cout << endl;
-
-        float maxValue = 20;
-        fa.max_frequency_scalar = 20 - 1;
-        fa.min_hz = -maxValue;
-        fa.f_step = (1/fa.max_frequency_scalar) * 2*maxValue;
-
-        for (int f=0; f<=fa.max_frequency_scalar; f++)
-            cout << f << " " << fa.getFrequency((float)f) << " Hz" << endl;
-
-        return 0;
-    }
-    if (0)
-    {
-        Intervals I(403456,403457);
-        Intervals J(0,403456);
-        cout << ((I-J) & J) << endl;
-        return 0;
-    }
-    if (0)
-    {
-        C* c = new C;
-        A* a = c;
-        tsta(c);
-        tstb(c);
-        tstc(c);
-        delete a;
-        c = new C;
-        B* b = c;
-        tsta(c);
-        tstb(c);
-        tstc(c);
-        delete b;
-        return 0;
-    }
-    if (0)
-    {
-        C c;
-        c.data = 1;
-        c.data2 = 2;
-        c.data3 = 3;
-        tsta(&c);
-        tstb(&c);
-        tstc(&c);
-        return 0;
-    }
-    if (0)
-    {
-        RedirectStdout rs("sonicawetest.log");
-        Signal::Intervals I(100, 300);
-        cout << I.toString() << endl;
-        I ^= Signal::Interval(150,150);
-        cout << I.toString() << endl;
-        I ^= Signal::Interval(50,50);
-        cout << I.toString() << endl;
-        I ^= Signal::Intervals(50,150);
-        cout << I.toString() << endl;
-        return 0;
-    }
-
-    if (0)
-    {
-        RedirectStdout rs("sonicawetest.log");
-        Signal::Intervals I(100, 300);
-        cout << I.toString() << endl;
-        I -= Signal::Interval(150,150);
-        cout << I.toString() << endl;
-        I |= Signal::Interval(50,50);
-        cout << I.toString() << endl;
-        I &= Signal::Intervals(150,150);
-        cout << I.toString() << endl;
-        return 0;
-    }
-    if (0)
-    {
-        RedirectStdout rs("sonicawetest.log");
-        Intervals I(100, 300);
-        vector<Intervals> T;
-        T.push_back( Intervals(50,80) );
-        T.push_back( Intervals(50,100));
-        T.push_back( Intervals(50,200));
-        T.push_back( Intervals(50,400));
-        T.push_back( Intervals(100,300));
-        T.push_back( Intervals(200,250));
-        T.push_back( Intervals(200,400));
-        T.push_back( Intervals(300,400));
-        T.push_back( Intervals(350,400));
-
-        // note operator precendence for bit operators:
-        // 'a & b == c' is equivalent to 'a & (b == c)'.
-        // Thas i  not '(a & b) == c' which was probably intended.
-
-        BOOST_ASSERT( (I | T[0]) == (Intervals(100,300) | Intervals(50,80)));
-        BOOST_ASSERT( (I | T[1]) == Intervals(50,300));
-        BOOST_ASSERT( (I | T[2]) == Intervals(50,300));
-        BOOST_ASSERT( (I | T[3]) == Intervals(50,400));
-        BOOST_ASSERT( (I | T[4]) == Intervals(100,300));
-        BOOST_ASSERT( (I | T[5]) == Intervals(100,300));
-        BOOST_ASSERT( (I | T[6]) == Intervals(100,400));
-        BOOST_ASSERT( (I | T[7]) == Intervals(100,400));
-        BOOST_ASSERT( (I | T[8]) == (Intervals(350,400) | Intervals(100,300)));
-        BOOST_ASSERT( (I - T[0]) == Intervals(100,300));
-        BOOST_ASSERT( (I - T[1]) == Intervals(100,300));
-        BOOST_ASSERT( (I - T[2]) == Intervals(200,300));
-        BOOST_ASSERT( (I - T[3]) == Intervals());
-        BOOST_ASSERT( (I - T[4]) == Intervals());
-        BOOST_ASSERT( (I - T[5]) == (Intervals(100,200) | Intervals(250,300)));
-        BOOST_ASSERT( (I - T[6]) == Intervals(100,200));
-        BOOST_ASSERT( (I - T[7]) == Intervals(100,300));
-        BOOST_ASSERT( (I - T[8]) == Intervals(100,300));
-        BOOST_ASSERT( (I & T[0]) == Intervals());
-        BOOST_ASSERT( (I & T[1]) == Intervals());
-        BOOST_ASSERT( (I & T[2]) == Intervals(100,200));
-        BOOST_ASSERT( (I & T[3]) == Intervals(100,300));
-        BOOST_ASSERT( (I & T[4]) == Intervals(100,300));
-        BOOST_ASSERT( (I & T[5]) == Intervals(200,250));
-        BOOST_ASSERT( (I & T[6]) == Intervals(200,300));
-        BOOST_ASSERT( (I & T[7]) == Intervals());
-        BOOST_ASSERT( (I & T[8]) == Intervals());
-        TaskInfo("ok");
-        return 0;
-    }
-    if (0)
-    {
-        std::vector<float> r;
-        r.reserve(10);
-        TaskInfo("r.size() = %u", r.size() );
-        r.push_back(4);
-        TaskInfo("r.size() = %u", r.size() );
-        return 0;
-    }
-    if (0)
-    {
-        {
-            TaskTimer tt("Timing tasktimer");
-        }
-        {
-            TaskTimer tt("Timing loop");
-            for (unsigned N = 1000; N; --N)
-            {
-            }
-        }
-        {
-            TaskTimer tt("Timing threadchecker");
-            for (unsigned N = 1000; N; --N)
-            {
-                ThreadChecker tc;
-            }
-        }
-        // Ubuntu, debug build of both gpumisc and sonicawe
-        //00:12:20.787 Timing tasktimer... done in 4.0 us.
-        //00:12:20.788 Timing loop... done in 6.0 us.
-        //00:12:20.788 Timing threadchecker... done in 37.0 us.
-        return 0;
-    }
-
-    if (0)
-    {
-        /*const A& a = hej();
-        std::cout << "tjo" << std::endl;
-        return 0;*/
-    }
 #ifdef USE_CUDA
     if (0) {
         ResampleTest rt;
@@ -470,36 +264,6 @@ int main(int argc, char *argv[])
 		cout << vartype(x) << ": " << x.what() << endl;
 		return 0;
 	}
-
-
-
-    if(0) {
-        TaskTimer tt("Testing supersample");
-        Adapters::Audiofile file("testfil.wav");
-        pBuffer data = file.read(Interval(0,1));
-        Statistics<float> s1(data->waveform_data());
-
-        pBuffer super = Tfr::SuperSample::supersample(data, 8*file.sample_rate());
-        tt.info("super %u", super->number_of_samples());
-        Statistics<float> s2(super->waveform_data());
-        Adapters::WriteWav::writeToDisk("testut.wav", super, false);
-        return 0;
-    }
-
-    if(0) {
-        Gauss g(ResamplePos(-1.1, 20), ResamplePos(1.5, 1.5));
-        double s = 0;
-        double dx = .1, dy = .1;
-
-        for (double y=10; y<30; y+=dy)
-            for (double x=-10; x<10; x+=dx)
-                s += g.gauss_value(x, y)*dx*dy;
-
-        printf("1-s=%g\n", (float)(1.f-s));
-        return 0;
-    }
-
-	
 
 
     QGL::setPreferredPaintEngine(QPaintEngine::OpenGL);
@@ -544,7 +308,7 @@ int main(int argc, char *argv[])
 
         // Check if a cuda context can be created, but don't require OpenGL bindings just yet
         if (!check_cuda( false ))
-            return 1337;
+            return -17;
 
         TaskInfo("computation device: %s", Sawe::Configuration::computationDeviceName().c_str());
 
@@ -566,39 +330,39 @@ int main(int argc, char *argv[])
             TaskTimer tt("Cwt inverse");
             Adapters::Audiofile file("chirp.wav");
 
-            Tfr::Cwt& cwt = Tfr::Cwt::Singleton();
+            Tfr::Cwt cwt;
 
             unsigned firstSample = 44100*2;
             unsigned chunk_alignment = cwt.chunk_alignment( file.sample_rate() );
             firstSample = int_div_ceil(firstSample, chunk_alignment)*chunk_alignment;
             unsigned time_support = cwt.wavelet_time_support_samples( file.sample_rate() );
 
-            pBuffer data = file.readFixedLength(Interval(firstSample,firstSample+65536));
+            pMonoBuffer data = file.readFixedLength(Interval(firstSample,firstSample+65536))->getChannel (0);
 
-            Tfr::pChunk chunk = Tfr::Cwt::Singleton()( data );
-            pBuffer inv = cwt.inverse( chunk );
+            Tfr::pChunk chunk = cwt( data);
+            pMonoBuffer inv = cwt.inverse( chunk );
 
             TaskTimer("%s", inv->getInterval().toString().c_str()).suppressTiming();
             TaskTimer("%s", Interval(
                     firstSample+time_support,
                     firstSample+time_support+inv->number_of_samples()).toString().c_str()).suppressTiming();
             //pBuffer data2 = file.readFixedLength( inv->getInterval() );
-            pBuffer data2 = file.readFixedLength(
+            pMonoBuffer data2 = file.readFixedLength(
             Interval(
                     firstSample+time_support,
-                    firstSample+time_support+inv->number_of_samples()));
+                    firstSample+time_support+inv->number_of_samples()))->getChannel (0);
 
             Statistics<float> s1(data2->waveform_data());
             Statistics<float> si(inv->waveform_data());
 
             tt.info("firstSample = %u", firstSample);
             tt.info("time_support = %u", time_support);
-            Adapters::WriteWav::writeToDisk("invtest.wav", inv, false);
+            Adapters::WriteWav::writeToDisk("invtest.wav", pBuffer(new Buffer(inv)), false);
             return 0;
         }
 
         int r = 0;
-        if (0 < a.count_projects())
+        if (a.has_other_projects_than(0))
         {
             if( 0 == QGLContext::currentContext())
             {

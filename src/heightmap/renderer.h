@@ -30,11 +30,13 @@ class Renderer
 {
 public:
     enum ColorMode {
-        ColorMode_Rainbow = 0,
-        ColorMode_Grayscale = 1,
-        ColorMode_FixedColor = 2,
-        ColorMode_GreenRed = 3,
-        ColorMode_GreenWhite = 4
+        ColorMode_Rainbow,
+        ColorMode_Grayscale,
+        ColorMode_BlackGrayscale,
+        ColorMode_FixedColor,
+        ColorMode_GreenRed,
+        ColorMode_GreenWhite,
+        ColorMode_Green
     };
 
     Renderer( Collection* collection );
@@ -81,6 +83,8 @@ public:
 
     float redundancy();
     void redundancy(float value);
+
+    void clearCaches();
 private:
     enum LevelOfDetal {
         Lod_NeedBetterF,
@@ -119,8 +123,8 @@ private:
     boost::shared_ptr<GlTexture> colorTexture;
 
     void setSize( unsigned w, unsigned h);
-    void createMeshIndexBuffer(unsigned w, unsigned h);
-    void createMeshPositionVBO(unsigned w, unsigned h);
+    void createMeshIndexBuffer(int w, int h);
+    void createMeshPositionVBO(int w, int h);
     void createColorTexture(unsigned N);
 
     void beginVboRendering();

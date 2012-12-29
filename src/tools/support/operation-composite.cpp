@@ -96,12 +96,12 @@ void OperationCrop::
 
     Operation::source( source_sub_operation_ );
     // remove before section
-    if (section.first)
-        Operation::source( pOperation( new OperationRemoveSection( Operation::source(), Signal::Interval(0, section.first) )) );
+    if (Signal::Interval::IntervalType_MIN < section.first)
+        Operation::source( pOperation( new OperationRemoveSection( Operation::source(), Signal::Interval( Signal::Interval::IntervalType_MIN, section.first ))));
 
     // remove after section
-    if (section.count()<Signal::Interval::IntervalType_MAX)
-        Operation::source( pOperation( new OperationRemoveSection( Operation::source(), Signal::Interval( section.count(), Signal::Interval::IntervalType_MAX))));
+    if (section.last < Signal::Interval::IntervalType_MAX)
+        Operation::source( pOperation( new OperationRemoveSection( Operation::source(), Signal::Interval( section.last - std::max(Signal::IntervalType(0), section.first), Signal::Interval::IntervalType_MAX ))));
 }
 
 
@@ -311,9 +311,9 @@ std::string OperationOnSelection::
 void OperationOnSelection::
         reset( pOperation insideSelection, pOperation outsideSelection, Signal::pOperation operation )
 {
-    BOOST_ASSERT(insideSelection);
-    BOOST_ASSERT(outsideSelection);
-    BOOST_ASSERT(operation);
+    EXCEPTION_ASSERT(insideSelection);
+    EXCEPTION_ASSERT(outsideSelection);
+    EXCEPTION_ASSERT(operation);
 
     insideSelection_ = insideSelection;
     operation_ = operation;

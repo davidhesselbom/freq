@@ -8,7 +8,7 @@
 #include "ui/mainwindow.h"
 #include "ui_mainwindow.h"
 #include "signal/target.h"
-#include "signal/sinksourcechannels.h"
+#include "signal/sinksource.h"
 #include "signal/operation-basic.h"
 #include "tfr/stft.h"
 
@@ -158,19 +158,22 @@ pBuffer SelectionViewInfoSink::
         Interval centerInterval = f;
         missing_-=f;
         f = Intervals(f).enlarge(sample_rate()/2).spannedInterval() & getInterval();
-        f.last = f.first + Tfr::Fft::lChunkSizeS( f.count() + 1, 4 );
+        f.last = f.first + Tfr::Fft().lChunkSizeS( f.count() + 1, 4 );
 
-        Tfr::Stft stft;
-        stft.setWindow(Tfr::Stft::WindowType_Hann, 0.5);
+        Tfr::StftParams stft;
+        stft.setWindow(Tfr::StftParams::WindowType_Hann, 0.5);
         stft.set_approximate_chunk_size( f.count() );
         stft.compute_redundant(false);
-        BOOST_ASSERT(stft.chunk_size() == f.count());
+        EXCEPTION_ASSERT(stft.chunk_size() == f.count());
 
         b = Operation::source()->readFixedLength(f);
-        Tfr::pChunk c = stft( b );
+
+        // Only check the first channel
+        // TODO check other channels
+        Tfr::pChunk c = (Tfr::Stft(stft))( b->getChannel (0));
         Tfr::ChunkElement* p = c->transform_data->getCpuMemory();
-        BOOST_ASSERT( 1 == c->nSamples() );
-        BOOST_ASSERT( c->nScales() == f.count()/2+1 );
+        EXCEPTION_ASSERT( 1 == c->nSamples() );
+        EXCEPTION_ASSERT( c->nScales() == f.count()/2+1 );
 
         unsigned N = c->nScales();
         std::vector<float> absValues(N);

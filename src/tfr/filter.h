@@ -4,10 +4,14 @@
 #include "signal/intervals.h"
 #include "signal/operation.h"
 
+#include <QMutex>
+
 namespace Tfr {
 
 class Transform;
 typedef boost::shared_ptr<Transform> pTransform;
+class TransformParams;
+typedef boost::shared_ptr<TransformParams> pTransformParams;
 
 class Chunk;
 typedef boost::shared_ptr<Chunk> pChunk;
@@ -15,6 +19,11 @@ typedef boost::shared_ptr<Chunk> pChunk;
 /// @see ChunkAndInverse::inverse
 struct ChunkAndInverse
 {
+    /**
+     * The transform used to compute the chunk.
+     */
+    pTransform t;
+
     /**
       The Tfr::Chunk as computed by readChunk(), or source()->readChunk()
       if transform() == source()->transform().
@@ -28,15 +37,46 @@ struct ChunkAndInverse
       this->transform()->inverse(chunk). In that case the inverse won't be
       computed again.
       */
-    Signal::pBuffer inverse;
+    Signal::pMonoBuffer inverse;
+
+
+    /**
+     * Which channel the monobuffer comes from.
+     */
+    int channel;
 };
+
+
+/**
+ * @brief The ChunkFilter class
+ */
+class ChunkFilter
+{
+public:
+    virtual ~ChunkFilter() {}
+
+    /**
+      The default implementation of applyFilter is to call operator()( Chunk& )
+      @see computeChunk
+      */
+    virtual bool applyFilter( ChunkAndInverse& chunk );
+
+protected:
+    /**
+      Apply the filter to a computed Tfr::Chunk. This is the method that should
+      be implemented to create new filters. Return true if it makes sense to
+      compute the inverse afterwards.
+      */
+    virtual bool operator()( Chunk& ) = 0;
+};
+typedef boost::shared_ptr<ChunkFilter> pChunkFilter;
 
 
 /**
   Virtual base class for filters. To create a new filter, use CwtFilter or
   StftFilter as base class and implement the method 'operator()( Chunk& )'.
   */
-class Filter: public Signal::Operation
+class Filter: public Signal::Operation, public ChunkFilter
 {
 public:
     /**
@@ -63,15 +103,26 @@ public:
     /**
       Filters are applied to chunks that are computed using some transform.
       transform()/transform(pTransform) gets/sets that transform.
+
+      For thread safety it is important to only call transform() once during
+      a computation pass. Subsequent calls to transform() might return
+      different transforms.
       */
-    virtual Tfr::pTransform transform() const = 0;
+    Tfr::pTransform transform();
 
 
-    /// @see transform()
-    virtual void transform( Tfr::pTransform m ) = 0;
+    /**
+      Set the Tfr::Transform for this operation and call invalidate_samples.
+      Will throw throw std::invalid_argument if the type of 'm' is not equal to
+      the previous type of transform().
+      */
+    void transform( Tfr::pTransform m );
 
 
-    /// @see transform()
+    /**
+      If _try_shortcuts is true. This method from Operation will be used to
+      try to avoid computing any actual transform.
+      */
     virtual Operation* affecting_source( const Signal::Interval& I );
 
 
@@ -91,46 +142,19 @@ public:
     virtual unsigned prev_good_size( unsigned current_valid_samples_per_chunk );
 
 protected:
-    /**
-      Apply the filter to a computed Tfr::Chunk. This is the method that should
-      be implemented to create new filters.
-      */
-    virtual void operator()( Chunk& ) = 0;
-
+    Filter(Filter&);
 
     /**
-      Meant to be used between Filters of the same kind to avoid transforming
-      back and forth multiple times.
-      */
-    virtual ChunkAndInverse readChunk( const Signal::Interval& I );
+     * @brief requiredInterval returns the interval that is required to compute
+     * a valid chunk representing interval I.
+     * @param I
+     * @param t transform() is not invariant use this instance instead.
+     */
+    virtual Signal::Interval requiredInterval( const Signal::Interval& I, Tfr::pTransform t ) = 0;
 
 
-    /**
-      readChunk first calls computeChunk to compute a chunk and then calls
-      applyFilter to apply the filter to the chunk.
-      */
-    virtual ChunkAndInverse computeChunk( const Signal::Interval& I ) = 0;
-
-
-    /**
-      The default implementation of applyFilter is to call operator()( Chunk& )
-      @see computeChunk
-      */
-    virtual void applyFilter( ChunkAndInverse& chunk );
-
-
-    /**
-      _try_shortcuts is set to false by an implementation if it requires that
-      all chunks be computed, even if the filter won't affect any samples when
-      the inverse is computed. If _try_shortcuts is false,
-      ChunkAndInverse::inverse _may_ contain the original Buffer as it were
-      before the chunk was computed.
-
-      _try_shortcuts defaults to true.
-      */
-    bool _try_shortcuts;
-
-
+private:
+    QMutex _transform_mutex;
     /**
       The Tfr::Transform used for computing chunks and inverse Buffers.
       */

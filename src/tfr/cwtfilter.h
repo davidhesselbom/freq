@@ -14,24 +14,7 @@ public:
                Tfr::pTransform transform=Tfr::pTransform() );
 
 
-    /**
-      This computes the Cwt chunk covering a given interval.
-      */
-    ChunkAndInverse computeChunk( const Signal::Interval& I );
-
-
-    /**
-      Get the Tfr::Transform for this operation.
-      */
-    Tfr::pTransform transform() const;
-
-
-    /**
-      Set the Tfr::Transform for this operation and update _invalid_samples.
-      Will throw throw std::invalid_argument if 'm' is not an instance of
-      Cwt.
-      */
-    void transform( Tfr::pTransform m );
+    virtual Signal::Interval requiredInterval (const Signal::Interval &I, pTransform t);
 
     Signal::Intervals include_time_support(Signal::Intervals);
     Signal::Intervals discard_time_support(Signal::Intervals);
@@ -39,7 +22,7 @@ public:
     virtual void invalidate_samples(const Signal::Intervals& I);
 
 protected:
-    void applyFilter( ChunkAndInverse& chunk );
+    bool applyFilter( ChunkAndInverse& chunk );
 
 private:
     float   _previous_scales_per_octave;
@@ -49,7 +32,7 @@ private:
 
 class DummyCwtFilter: public CwtFilter {
 public:
-    virtual void operator()( Chunk& ) {}
+    virtual bool operator()( Chunk& ) { return false; }
 };
 } // namespace Tfr
 

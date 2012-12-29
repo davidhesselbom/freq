@@ -8,10 +8,10 @@
 #include "waveletkerneldef.h"
 
 
-__global__ void kernel_compute_wavelet_coefficients( float2* in_waveform_ft, float2* out_wavelet_ft, unsigned nFrequencyBins, unsigned nScales, float first_j, float v, float sigma_t0, float normalization_factor );
+__global__ void kernel_compute_wavelet_coefficients( float2* in_waveform_ft, float2* out_wavelet_ft, int nFrequencyBins, int nScales, float first_j, float v, float sigma_t0, float normalization_factor );
 __global__ void kernel_inverse( float2* in_wavelet, float* out_inverse_waveform, DataStorageSize numElem );
-//__global__ void kernel_inverse_ellipse( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, unsigned n_valid_samples );
-//__global__ void kernel_inverse_box( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, unsigned n_valid_samples );
+//__global__ void kernel_inverse_ellipse( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, int n_valid_samples );
+//__global__ void kernel_inverse_box( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, int n_valid_samples );
 __global__ void kernel_clamp( cudaPitchedPtrType<float2> in_wt, size_t sample_offset, cudaPitchedPtrType<float2> out_clamped_wt );
 
 static const char* gLastError = 0;
@@ -41,7 +41,7 @@ void wtCompute(
         float fs,
         float /*minHz*/,
         float maxHz,
-        unsigned half_sizes,
+        int half_sizes,
         float scales_per_octave,
         float sigma_t0,
         float normalization_factor )
@@ -102,12 +102,12 @@ void wtCompute(
 __global__ void kernel_compute_wavelet_coefficients(
         float2* in_waveform_ft,
         float2* out_wavelet_ft,
-        unsigned nFrequencyBins, unsigned nScales, float first_scale, float v, float sigma_t0,
+        int nFrequencyBins, int nScales, float first_scale, float v, float sigma_t0,
         float normalization_factor )
 {
     // Which frequency bin in the discrete fourier transform this thread
     // should work with
-    const unsigned
+    const int
             w_bin = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     // Negative frequencies are defined as 0 and are not stored in in_waveform_ft
@@ -126,9 +126,9 @@ __global__ void kernel_compute_wavelet_coefficients(
     }
     else if (w_bin<nFrequencyBins)
     {
-        for( unsigned j=0; j<nScales; j++)
+        for( int j=0; j<nScales; j++)
         {
-            unsigned offset = (nScales-1-j)*nFrequencyBins;
+            int offset = (nScales-1-j)*nFrequencyBins;
             out_wavelet_ft[offset + w_bin] = make_float2(0,0);
         }
     }
@@ -156,7 +156,7 @@ void wtInverse( Tfr::ChunkData::Ptr in_waveletp, DataStorage<float>::Ptr out_inv
 
 __global__ void kernel_inverse( float2* in_wavelet, float* out_inverse_waveform, DataStorageSize numElem )
 {
-    const unsigned
+    const int
             x = blockIdx.x*blockDim.x + threadIdx.x;
 
     inverse_elem( x, in_wavelet, out_inverse_waveform, numElem );
@@ -164,7 +164,7 @@ __global__ void kernel_inverse( float2* in_wavelet, float* out_inverse_waveform,
 
 
 /*
-void wtInverseEllipse( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, unsigned n_valid_samples, cudaStream_t stream )
+void wtInverseEllipse( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, int n_valid_samples, cudaStream_t stream )
 {
     // Multiply the coefficients together and normalize the result
     dim3 block(256,1,1);
@@ -178,9 +178,9 @@ void wtInverseEllipse( float2* in_wavelet, float* out_inverse_waveform, cudaExte
     kernel_inverse_ellipse<<<grid, block, 0, stream>>>( in_wavelet, out_inverse_waveform, numElem, area, n_valid_samples );
 }
 
-__global__ void kernel_inverse_ellipse( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, unsigned n_valid_samples )
+__global__ void kernel_inverse_ellipse( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, int n_valid_samples )
 {
-    const unsigned
+    const int
             x = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (x>=n_valid_samples)
@@ -191,7 +191,7 @@ __global__ void kernel_inverse_ellipse( float2* in_wavelet, float* out_inverse_w
     float a = 0;
 
     // disc selection
-    for (unsigned fi=0; fi<numElem.height; fi++)
+    for (int fi=0; fi<numElem.height; fi++)
     {
         float rx = area.z-area.x;
         float ry = area.w-area.y;
@@ -207,7 +207,7 @@ __global__ void kernel_inverse_ellipse( float2* in_wavelet, float* out_inverse_w
     out_inverse_waveform[x] = a;
 }
 
-void wtInverseBox( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, unsigned n_valid_samples, cudaStream_t stream )
+void wtInverseBox( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, int n_valid_samples, cudaStream_t stream )
 {
     // Multiply the coefficients together and normalize the result
     dim3 block(256,1,1);
@@ -221,9 +221,9 @@ void wtInverseBox( float2* in_wavelet, float* out_inverse_waveform, cudaExtent n
     kernel_inverse_box<<<grid, block, 0, stream>>>( in_wavelet, out_inverse_waveform, numElem, area, n_valid_samples );
 }
 
-__global__ void kernel_inverse_box( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, unsigned n_valid_samples )
+__global__ void kernel_inverse_box( float2* in_wavelet, float* out_inverse_waveform, cudaExtent numElem, float4 area, int n_valid_samples )
 {
-    const unsigned
+    const int
             x = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (x>=n_valid_samples)
@@ -236,7 +236,7 @@ __global__ void kernel_inverse_box( float2* in_wavelet, float* out_inverse_wavef
     // box selection
     if (x>=area.x && x<=area.z)
       {
-        for (unsigned fi=max(0.f,area.y); fi<numElem.height && fi<area.w; fi++)
+        for (int fi=max(0.f,area.y); fi<numElem.height && fi<area.w; fi++)
         {
             float2 v = in_wavelet[ x + fi*numElem.width ];
             // select only the real component of the complex transform
@@ -253,7 +253,7 @@ void wtClamp( Tfr::ChunkData::Ptr in_wtp, size_t sample_offset, Tfr::ChunkData::
     cudaPitchedPtrType<float2> out_clamped_wt(CudaGlobalStorage::WriteAll<2>( out_clamped_wtp ).getCudaPitchedPtr());
 
     dim3 grid, block;
-    unsigned block_size = 256;
+    int block_size = 256;
     out_clamped_wt.wrapCudaGrid2D( block_size, grid, block );
 
     if(grid.x>65535) {

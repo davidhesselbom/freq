@@ -34,7 +34,9 @@ public slots:
     void windowTypeChanged();
     void overlapChanged();
     void averagingChanged();
-    void normalizationChanged();
+    void timeNormalizationChanged(qreal);
+    void freqNormalizationChanged(qreal);
+    void freqNormalizationPercentChanged(qreal);
 
 private:
     Ui::TransformInfoForm *ui;

@@ -1,5 +1,7 @@
 #include "selectioncontroller.h"
 
+#include <QMouseEvent>
+
 // Sonic AWE
 #include "renderview.h"
 #include "sawe/project.h"
@@ -37,12 +39,13 @@ namespace Tools
                 _render_view(render_view),
                 _worker(&render_view->model->project()->worker),
                 selectionComboBox_(0),
-                tool_selector_( new Support::ToolSelector(render_view->model->project()->commandInvoker(), this))
+                tool_selector_( new Support::ToolSelector(render_view->model->project()->commandInvoker(), this)),
+                deselect_action_(0),
+                selecting(false)
     {
-        setupGui();
-
-        setAttribute(Qt::WA_DontShowOnScreen, true);
         setEnabled( false );
+
+        setupGui();
     }
 
 
@@ -102,10 +105,19 @@ namespace Tools
         connect(_model, SIGNAL(selectionChanged()), SLOT(onSelectionChanged()));
         connect(_model->project()->head.get(), SIGNAL(headChanged()), SLOT(tryHeadAsSelection()));
         connect(selectionComboBox_, SIGNAL(toggled(bool)), SLOT(selectionComboBoxToggled()));
+        connect(this, SIGNAL(enabledChanged(bool)), selectionComboBox_, SLOT(setChecked(bool)));
+
+        deselect_action_ = new QAction(this);
+        connect(deselect_action_, SIGNAL(triggered()), SLOT(deselect()));
+        deselect_action_->setShortcut(Qt::Key_Escape);
+        addAction(deselect_action_);
+
 
         setCurrentSelection(Signal::pOperation());
 
         toolfactory();
+
+        _render_view->tool_selector->default_tool = this;
 
 #ifdef TARGET_hast
         ui->actionActionRemove_selection->setVisible(false);
@@ -165,6 +177,13 @@ namespace Tools
 
 
     void SelectionController::
+            deselect()
+    {
+        setCurrentSelection(Signal::pOperation());
+    }
+
+
+    void SelectionController::
             setCurrentTool( QWidget* tool, bool active )
     {
 //        render_view()->toolSelector()->setCurrentTool(
@@ -202,6 +221,8 @@ namespace Tools
         {
             Commands::pCommand p( new Commands::ChangeSelectionCommand(this, selection));
             this->model()->project()->commandInvoker()->invokeCommand( p );
+
+            //model()->project()->mainWindow()->getItems()->actionPlaySelection->trigger();
         }
     }
 
@@ -261,13 +282,23 @@ namespace Tools
     void SelectionController::
             changeEvent ( QEvent * event )
     {
-        if (event->type() & QEvent::EnabledChange)
+        if (event->type() == QEvent::EnabledChange)
         {
             setThisAsCurrentTool( isEnabled() );
             emit enabledChanged(isEnabled());
         }
     }
 
+
+    void SelectionController::
+            mousePressEvent ( QMouseEvent * e )
+    {
+        if (Qt::RightButton == e->button())
+        {
+            this->setCurrentSelection(Signal::pOperation());
+            render_view()->userinput_update();
+        }
+    }
 
 //    void SelectionController::
 //            receiveAddSelection()
@@ -468,7 +499,7 @@ namespace Tools
         while ( prev->source() != next )
         {
             prev = prev->source();
-            BOOST_ASSERT( prev );
+            EXCEPTION_ASSERT( prev );
         }
 
         prev->source( next->source() );

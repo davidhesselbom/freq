@@ -37,6 +37,10 @@ def custom_lib_path(name, path = nil)
     return "#{$custom_library_path}/#{"#{path}/" if(path)}lib#{name}.dylib"
 end
 
+def gcc47_lib_path(name)
+    return "/opt/local/lib/gcc47/lib#{name}.dylib"
+end
+
 def run(cmd)
     unless system(cmd)
         puts "Error: Could not run #{cmd}"
@@ -56,7 +60,10 @@ def package_macos(app_name, version, packagename, zip = false)
                  custom_lib_path("vorbis"),
                  custom_lib_path("vorbisenc"),
                  custom_lib_path("hdf5"),
-                 custom_lib_path("hdf5_hl")];
+                 custom_lib_path("hdf5_hl"),
+                 gcc47_lib_path("gomp.1"),
+                 gcc47_lib_path("gcc_s.1"),
+                 gcc47_lib_path("stdc++.6")];
 
     directories = ["Contents/Frameworks",
                    "Contents/MacOS",
@@ -75,20 +82,22 @@ def package_macos(app_name, version, packagename, zip = false)
 
     use_bin = Array.new()
 
-    run("rm -rf #{app_name}.app")
+    appfolder = "sonicawe.app"
+    # appfolder = "#{app_name}.app"
+    run("rm -rf #{appfolder}")
 
     # Creating directories
     puts " Creating application directories ".center($command_line_width, "=")
     directories.each do |directory|
-        puts " creating: #{app_name}.app/#{directory}"
-        run("mkdir -p #{app_name}.app/#{directory}")
+        puts " creating: #{appfolder}/#{directory}"
+        run("mkdir -p #{appfolder}/#{directory}")
     end
 
     # Copying libraries
     puts " Copying dynamic libraries ".center($command_line_width, "=")
     libraries.each do |library|
         puts " copying: #{library}"
-        local_lib = "#{app_name}.app/Contents/Frameworks/#{File.basename(library)}"
+        local_lib = "#{appfolder}/Contents/Frameworks/#{File.basename(library)}"
         use_bin.push(local_lib)
         run("cp #{library} #{local_lib}")
     end
@@ -97,7 +106,7 @@ def package_macos(app_name, version, packagename, zip = false)
     puts " Copying executables ".center($command_line_width, "=")
     executables.each do |executable|
         puts " copying: #{executable[0]}"
-        local_exec = "#{app_name}.app/Contents/MacOS/#{File.basename(executable[1])}"
+        local_exec = "#{appfolder}/Contents/MacOS/#{File.basename(executable[1])}"
         use_bin.push(local_exec)
         run("cp #{executable[0]} #{local_exec}")
     end
@@ -106,7 +115,7 @@ def package_macos(app_name, version, packagename, zip = false)
     puts " Copying executables ".center($command_line_width, "=")
     additionals.each do |additional|
         puts " copying: #{additional[0]}"
-        local_name = "#{app_name}.app/Contents/MacOS/#{File.basename(additional[1])}"
+        local_name = "#{appfolder}/Contents/MacOS/#{File.basename(additional[1])}"
         use_bin.push(local_name)
         unless system("cp #{additional[0]} #{local_name}")
             puts "Warning: Could not copy #{additional[0]}"
@@ -117,10 +126,10 @@ def package_macos(app_name, version, packagename, zip = false)
     puts " Copying resources ".center($command_line_width, "=")
     resources.each do |resource|
         puts " copying: #{resource}"
-        run("cp -r #{resource} #{app_name}.app/Contents/Resources/#{File.basename(resource)}")
+        run("cp -r #{resource} #{appfolder}/Contents/Resources/#{File.basename(resource)}")
     end
-    run("cp -r ../matlab #{app_name}.app/Contents/MacOS/matlab")
-    run("cp -r ../plugins #{app_name}.app/Contents/MacOS/plugins/examples")
+    run("cp -r ../matlab #{appfolder}/Contents/MacOS/matlab")
+    run("cp -r ../plugins #{appfolder}/Contents/MacOS/plugins/examples")
 
     # Add application information
     puts " Adding application information ".center($command_line_width, "=")
@@ -128,11 +137,11 @@ def package_macos(app_name, version, packagename, zip = false)
     info = File.read("package-macos~/Info.plist")
     info.gsub!("(VERSION_TAG)", "#{version}")
     info.gsub!("(LONG_VERSION_TAG)", "Sonic AWE #{version}")
-    File.open("#{app_name}.app/Contents/Info.plist", "w") do |file|
+    File.open("#{appfolder}/Contents/Info.plist", "w") do |file|
         file.write(info)
     end
     puts " copying: package-macos~/PkgInfo"
-    system("cp package-macos~/PkgInfo #{app_name}.app/Contents/PkgInfo")
+    system("cp package-macos~/PkgInfo #{appfolder}/Contents/PkgInfo")
 
     # Setting install names
     puts " Fixing install names ".center($command_line_width, "=")
@@ -140,7 +149,7 @@ def package_macos(app_name, version, packagename, zip = false)
         libname = "#{File.basename(library)}"
         puts " library: #{libname}"
 
-        libpath = "#{app_name}.app/Contents/Frameworks"
+        libpath = "#{appfolder}/Contents/Frameworks"
         newlibpath = "@executable_path/../Frameworks"
         libfile = "#{libpath}/#{libname}"
         targetid = `otool -DX #{libfile}`.strip
@@ -159,7 +168,7 @@ def package_macos(app_name, version, packagename, zip = false)
         end
     end
 
-    run("macdeployqt #{app_name}.app -executable=#{app_name}.app/Contents/MacOS/#{app_name}-cuda")
+    run("macdeployqt sonicawe.app -executable=sonicawe.app/Contents/MacOS/sonicawe-cuda")
 
 	# macdeployqt can create a dmg with the -dmg argument, rename the resulting dmg:
     # run("mv #{app_name}.dmg #{packagename}.dmg")
@@ -172,8 +181,8 @@ def package_macos(app_name, version, packagename, zip = false)
     #        system("rm #{packagename}.zip")
     #    end
     #    puts " creating: #{app_name}.zip"
-    #    unless system("zip -r #{packagename}.zip #{app_name}.app") && system("zip -r #{packagename}.zip  ../license")
-    #        puts "Error: Unable to zip application, #{app_name}.app"
+    #    unless system("zip -r #{packagename}.zip #{appfolder}") && system("zip -r #{packagename}.zip  ../license")
+    #        puts "Error: Unable to zip application, #{appfolder}"
     #        exit(1)
     #    end
     #end
@@ -182,10 +191,10 @@ def package_macos(app_name, version, packagename, zip = false)
     # http://stackoverflow.com/questions/96882/how-do-i-create-a-nice-looking-dmg-for-mac-os-x-using-command-line-tools
 	run("rm -rf pack")
 	run("mkdir pack")
-	run("cp -r \"#{app_name}.app\" \"pack/Sonic AWE.app\"")
+	run("cp -r \"sonicawe.app\" \"pack/Sonic AWE.app\"")
 	run("ln -s /Applications pack/Applications")
 	run("rm -f #{packagename}.dmg")
-	run("hdiutil create -srcfolder pack -volname \"Sonic AWE\" -fs HFS+ #{packagename}.dmg")
+	run("hdiutil create -size 128m -srcfolder pack -volname \"Sonic AWE\" -fs HFS+ #{packagename}.dmg")
 	run("rm -rf pack")
 end
 

@@ -145,19 +145,20 @@ bool MatlabOperation::
                 float start = ready_data->start();
                 float length = ready_data->length();
 
-                DataStorageSize N = plot_pts->waveform_data()->size();
-                for (unsigned id=0; id<N.depth; ++id)
+                Signal::pTimeSeriesData data = plot_pts->mergeChannelData ();
+                DataStorageSize N = data->size();
+                for (int id=0; id<N.depth; ++id)
                 {
-                    float* p = CpuMemoryStorage::ReadOnly<1>( plot_pts->waveform_data() ).ptr() + id*N.width*N.height;
+                    float* p = CpuMemoryStorage::ReadOnly<1>( data ).ptr() + id*N.width*N.height;
 
                     if (3 <= N.height)
-                        for (unsigned x=0; x<N.width; ++x)
+                        for (int x=0; x<N.width; ++x)
                             plotlines.set( id, p[ x ], p[ x + N.width ], p[ x + 2*N.width ] );
                     else if (2 == N.height)
-                        for (unsigned x=0; x<N.width; ++x)
+                        for (int x=0; x<N.width; ++x)
                             plotlines.set( id, p[ x ], p[ x + N.width ] );
                     else if (1 == N.height)
-                        for (unsigned x=0; x<N.width; ++x)
+                        for (int x=0; x<N.width; ++x)
                             plotlines.set( id, start + (x+0.5)*length/N.width, p[ x ] );
 
                     TaskInfo("Line plot %u now has %u points", id, plotlines.line( id ).data.size());
@@ -168,13 +169,13 @@ bool MatlabOperation::
         Interval oldI = sent_data->getInterval();
         Interval newI = ready_data->getInterval();
 
-        float *oldP = sent_data->waveform_data()->getCpuMemory();
-        float *newP = ready_data->waveform_data()->getCpuMemory();
-
         Intervals J;
+        Interval allequal = oldI & newI;
 
-        for (unsigned c=0; c<ready_data->channels() && c<sent_data->channels(); c++)
+        for (unsigned c=0; c<ready_data->number_of_channels () && c<sent_data->number_of_channels (); c++)
         {
+            float *oldP = sent_data->getChannel (c)->waveform_data()->getCpuMemory();
+            float *newP = ready_data->getChannel (c)->waveform_data()->getCpuMemory();
             Interval equal = oldI & newI;
             oldP += equal.first - oldI.first;
             newP += equal.first - newI.first;
@@ -187,11 +188,11 @@ bool MatlabOperation::
                     break;
                 }
 
-            if (equal.count())
-                _invalid_returns[c] -= equal;
+            allequal &= equal;
 
             J |= newI - equal;
         }
+        _invalid_returns -= allequal;
 
         Signal::Intervals samples_to_invalidate = invalid_returns() & J;
         TaskInfo("invalid_returns = %s, J = %s, invalid_returns & J = %s",
@@ -323,7 +324,7 @@ pBuffer MatlabOperation::
             TaskInfo("MatlabOperation::read(%s) Returning ready data %s, %u channels",
                      I.toString().c_str(),
                      b->getInterval().toString().c_str(),
-                     b->waveform_data()->size().height );
+                     b->number_of_channels () );
             return b;
         }
 
@@ -351,7 +352,7 @@ pBuffer MatlabOperation::
 
             // just 'read()' might return the entire signal, which would be way to
             // slow to export in an interactive manner
-            sent_data = source()->readFixedLengthAllChannels( K );
+            sent_data = source()->readFixedLength( K );
 
             string file = _matlab->getTempName();
 

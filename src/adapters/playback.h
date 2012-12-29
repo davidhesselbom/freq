@@ -1,7 +1,7 @@
 #ifndef ADAPTERS_PLAYBACK_H
 #define ADAPTERS_PLAYBACK_H
 
-#include "signal/sinksourcechannels.h"
+#include "signal/sinksource.h"
 
 #include <vector>
 #include <time.h>
@@ -22,9 +22,9 @@ public:
     virtual bool deleteMe();
     virtual void invalidate_samples( const Signal::Intervals& s );
     virtual unsigned num_channels();
-    virtual void set_channel(unsigned c);
     virtual Signal::Intervals invalid_samples();
 
+    void setExpectedSamples( const Signal::Interval& I );
     void stop();
     void reset();
     void onFinished();
@@ -55,7 +55,8 @@ public:
 
     void        restart_playback();
 private:
-    Signal::SinkSourceChannels _data;
+    Signal::SinkSource _data;
+    Signal::Interval _expected;
     boost::posix_time::ptime
             _first_timestamp,
             _last_timestamp,

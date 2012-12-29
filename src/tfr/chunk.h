@@ -52,7 +52,7 @@ public:
     ChunkData::Ptr transform_data;
 
 
-    unsigned offset(unsigned sample, unsigned f_index);
+    Signal::IntervalType offset(Signal::IntervalType sample, int f_index);
 
 
     /**
@@ -70,20 +70,62 @@ public:
 
         Interval(
             chunk_offset + first_valid_sample,
-            chunk_offset + first_valid_sample + n_valid_samples )
+            chunk_offset + first_valid_sample + n_valid_samples ) * original_sample_rate/sample_rate
 
-      This interval is returned by getInversedInterval.
+      This interval is returned by getInterval.
+
+
+        Example
+        window size = 40 => alignment = 40
+        overlap = 75% => increment = 10
+        averaging = 1
+
+        Time series samples
+        0    10   20   30   40   50   60   70   80   90   100  110  120
+        |----|----|----|----|----|----|----|----|----|----|----|----|
+
+        STFT overlapping windows
+        [-------(-0-)------][-------(-4-)------][-------(-8-)------]
+             [-------(-1-)------][-------(-5-)------]
+                  [-------(-2-)------][-------(-6-)------]
+                       [-------(-3-)------][-------(-7-)------]
+
+        chunk_offset = 0
+        the first chunk represents the frequency around sample index 20.
+        Measured in steps of increment*averaging. Start at sample number 15.
+
+        first_valid_sample = 3
+        when compting the inverse, window number 3 is the first window with full support
+        (note that "first_valid_sample" only makes sense if the transform is invertible)
+
+        valid samples = 3
+        window number 3, 4 and 5 have full support
+
+        getInterval = [30, 90)
+        getCoveredInterval = [20, 100)
+
+        STFT disjoint windows
+        0    10   20   30   40   50   60   70   80   90   100  110  120
+        |----|----|----|----|----|----|----|----|----|----|----|----|
+        [---------0--------][---------1--------][---------2--------]
+
+        chunk_offset = 0
+        first_valid_sample = 0
+        valid samples = 3
+
+        getInterval = [0, 120)
+        getCoveredInterval = [20, 100)
 
       @see chunk_offset
       @see getInterval
       */
-    unsigned first_valid_sample;
+    int first_valid_sample;
 
 
     /**
         @see first_valid_sample
       */
-    unsigned n_valid_samples;
+    int n_valid_samples;
 
 
     /**
@@ -108,12 +150,12 @@ public:
     float startTime() const {          return ((chunk_offset+first_valid_sample)/sample_rate).asFloat(); }
     float endTime() const {            return startTime() + timeInterval(); }
 
-    virtual unsigned nSamples() const {        return order==Order_row_major ? transform_data->getNumberOfElements().width : transform_data->getNumberOfElements().height; }
-    virtual unsigned nScales() const {         return order==Order_row_major ? transform_data->getNumberOfElements().height: transform_data->getNumberOfElements().width;  }
-    virtual unsigned nChannels() const {       return transform_data->getNumberOfElements().depth; }
+    virtual unsigned nSamples() const {        return order==Order_row_major ? transform_data->size().width : transform_data->size().height; }
+    virtual unsigned nScales() const {         return order==Order_row_major ? transform_data->size().height: transform_data->size().width;  }
+    virtual unsigned nChannels() const {       return transform_data->size().depth; }
 
     bool valid() const {
-        return 0 != transform_data->getSizeInBytes1D() &&
+        return 0 != transform_data->numberOfBytes() &&
                0 != sample_rate &&
                minHz() < maxHz() &&
                (order == Order_row_major || order == Order_column_major);
@@ -123,21 +165,13 @@ public:
 
 
     /**
-      Returns the interval that would be produced by the inverse transform.
+      Returns an equivalent interval in the original sample rate.
 
         Interval(
             chunk_offset + first_valid_sample,
             chunk_offset + first_valid_sample + n_valid_samples )
-      */
-    virtual Signal::Interval getInversedInterval() const;
 
-
-    /**
-      Returns an equivalent interval in the original sample rate.
-
-        Interval(
-            getInversedInterval().first*original_sample_rate/sample_rate,
-            getInversedInterval().last*original_sample_rate/sample_rate)
+        But rescaled by original_sample_rate/sample_rate
       */
     virtual Signal::Interval getInterval() const;
 

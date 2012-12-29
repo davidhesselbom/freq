@@ -48,7 +48,7 @@ if [ "$1" = "--help" ]; then
   echo
   echo
   echo "To run a single test with a single configurations multiple times"
-  echo "it might be more convenient to use this script only to recompile"
+  echo "it might be more convenient to use this script only to recompile,"
   echo "and then execute the specific test directly from the test folder."
   echo "A neat function to rerun a script 100 times is this:"
   echo
@@ -67,12 +67,16 @@ if [ "$1" = "--help" ]; then
   echo "  looptest ./release/stft.exe"
   echo
   echo "To run the stft test 100 times from the stft test folder."
-  exit
+  false
 fi
 
-if [ "`pwd | grep 'sonicawe/tests$'`" = "" ]; then
+if [ `dirname $0` == "tests" ] && [ -d tests ]; then
+  cd tests
+fi
+
+if [ "`pwd | grep 'sonicawe/tests$'`" == "" ]; then
   echo "Run this script from sonicawe/tests"
-  exit
+  false
 fi
 
 startdir=`pwd`
@@ -81,7 +85,7 @@ failed=
 success=
 skipped=0
 
-if [ "$(uname -s)" = "MINGW32_NT-6.1" ]; then
+if [ -n "$(uname -s | grep MINGW32_NT)" ]; then
     platform=windows
 elif [ "$(uname -s)" = "Linux" ]; then
     platform=debian
@@ -103,8 +107,8 @@ if [ "$platform" = "windows" ]; then
     # make vcbuild called by msbuild detect changes in headers
     PATH="/c/Program Files (x86)/Microsoft Visual Studio 9.0/Common7/IDE:${PATH}"
 
-    PATH="$(cd ../src/release; pwd):${PATH}"
-    PATH="$(cd ../lib/sonicawe-winlib/sonicawe_snapshot_win32_base; pwd):${PATH}"
+    PATH="${PATH}:$(cd ../src; pwd)/release"
+    PATH="${PATH}:$(cd ../lib/sonicawe-winlib/sonicawe_snapshot_win32_base; pwd)"
     outputdir="release"
     qmakeargs=
 else
@@ -114,7 +118,7 @@ else
         staticlibname(){ echo lib${1}.a; }
         dynamiclibname(){ echo lib${1}.dylib; }
         qmakeargs="-spec macx-g++ CONFIG+=release"
-        export DYLD_LIBRARY_PATH="$(cd ../lib/sonicawe-maclib; pwd):$(cd ..; pwd):/usr/local/cuda/lib"
+        export DYLD_LIBRARY_PATH="$(cd ../lib/sonicawe-maclib/lib; pwd):$(cd ../src; pwd):/usr/local/cuda/lib"
         no_cores=`/usr/sbin/system_profiler -detailLevel full SPHardwareDataType | grep -i "Number Of Cores" | sed "s/.*: //g"`
     else
         timestamp(){ date --rfc-3339=seconds; }
@@ -122,7 +126,7 @@ else
         dynamiclibname(){ echo lib${1}.so; }
         #qmakeargs="CONFIG+=gcc-4.3"
         qmakeargs=
-        export LD_LIBRARY_PATH="$(cd ../src; pwd):${PATH}"
+        export LD_LIBRARY_PATH="$(cd ../src; pwd):$(cd ../lib/sonicawe-ubuntulib/lib; pwd)"
         no_cores=$(cat /proc/cpuinfo | grep -c processor)
     fi
     linkcmd="ln -s"
@@ -151,21 +155,27 @@ for configname in $configurations; do
 
   ret=0
   (
-    cd .. &&
-    echo $now &&
-    pwd &&
+    cd ..
+    timestamp
+    pwd
+
+    echo
+    git show-ref HEAD --head
+    git submodule status
+    git status
+    echo
+    git diff
+    echo
 
     # need to relink both gpumisc and sonicawe when switching configurations
     touch src/sawe/configuration/configuration.cpp
-    rm -f {lib/gpumisc,src}/Makefile &&
-    rm -f lib/gpumisc/$(staticlibname gpumisc) &&
-    rm -f src/$(dynamiclibname sonicawe) &&
+    rm -f {lib/gpumisc,src}/Makefile
+    rm -f lib/gpumisc/$(staticlibname gpumisc)
+    rm -f src/$(dynamiclibname sonicawe)
 
     qmakecmd="qmake CONFIG+=testlib $qmakeargs CONFIG+=${configname}" &&
     echo $qmakecmd &&
-    $qmakecmd &&
-    (cd lib/gpumisc && $qmakecmd) &&
-    (cd src && $qmakecmd) &&
+    $qmakecmd -r &&
     eval echo $makecmd &&
     eval time $makecmd &&
     ls -l lib/gpumisc/$(staticlibname gpumisc) src/$(dynamiclibname sonicawe)
@@ -185,7 +195,7 @@ for configname in $configurations; do
 	  continue
 	fi
 
-    if [ "" != "$*" ] && [ -z "$( echo "${name} ${configname}" | eval grep $* )" ]; then
+    if [ "" != "$*" ] && [ -z "$( echo "${name} ${configname}" | eval egrep \"$*\" )" ]; then
 	  echo -n "_"
 	  skipped=$(( skipped + 1 ))
       continue
@@ -193,8 +203,7 @@ for configname in $configurations; do
 
     cd "$name"
 
-    testname=`echo $name | sed 's/.*\///'`
-	testname=`basename $name`
+    testname=`basename "$name" | sed 's/^[-0-9]*//'`
 
     timeout=$defaulttimeout
     if [ -f timeoutseconds ]; then
@@ -209,10 +218,11 @@ for configname in $configurations; do
 
     ret=0
     (
-      echo $now &&
+      timestamp &&
       pwd &&
       rm -f Makefile &&
       rm -f "$outputdir/$testname" &&
+      rm -f "$outputdir/$(staticlibname $testname)" &&
       echo qmake $qmakeargs CONFIG+=${configname} &&
       qmake $qmakeargs CONFIG+=${configname} &&
       eval echo $makeonecmd &&

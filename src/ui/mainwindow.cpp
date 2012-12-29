@@ -124,9 +124,9 @@ void SaweMainWindow::
 //    ui->topFilterWindow->raise();
 
     // todo move into toolfactory
+    this->addToolBar( Qt::TopToolBarArea, ui->toolBarPlay );
     this->addToolBar( Qt::TopToolBarArea, ui->toolBarOperation );
     //this->addToolBar( Qt::TopToolBarArea, ui->toolBarMatlab );
-    this->addToolBar( Qt::LeftToolBarArea, ui->toolBarPlay );
 
     //new Saweui::PropertiesSelection( ui->toolPropertiesWindow );
     //ui->toolPropertiesWindow-
@@ -182,7 +182,8 @@ void SaweMainWindow::
 
 
     ui->menuDevicename->setTitle( ("Using " + Sawe::Configuration::computationDeviceName()).c_str() );
-
+    if (!Sawe::Configuration::feature("compute_device_info_in_menu"))
+        ui->menuDevicename->menuAction()->setVisible(false);
 
     connect(this, SIGNAL(onMainWindowCloseEvent(QWidget*)),
         Sawe::Application::global_ptr(), SLOT(slotClosed_window( QWidget*)),
@@ -194,7 +195,7 @@ void SaweMainWindow::
 void SaweMainWindow::slotCheckWindowStates(bool)
 {
     unsigned int size = controlledWindows.size();
-    for(unsigned int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++)
     {
         controlledWindows[i].a->setChecked(!(controlledWindows[i].w->isHidden()));
     }
@@ -202,7 +203,7 @@ void SaweMainWindow::slotCheckWindowStates(bool)
 void SaweMainWindow::slotCheckActionStates(bool)
 {
     unsigned int size = controlledWindows.size();
-    for(unsigned int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++)
     {
         controlledWindows[i].w->setVisible(controlledWindows[i].a->isChecked());
     }
@@ -328,9 +329,9 @@ void SaweMainWindow::
         openRecentFile()
 {
     QAction* a = dynamic_cast<QAction*>(sender());
-    BOOST_ASSERT( a );
+    EXCEPTION_ASSERT( a );
     QString s = a->data().toString();
-    BOOST_ASSERT( !s.isEmpty() );
+    EXCEPTION_ASSERT( !s.isEmpty() );
     if (0 == Sawe::Application::global_ptr()->slotOpen_file( s.toLocal8Bit().constData() ))
     {
         QSettings settings;

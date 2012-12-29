@@ -289,7 +289,7 @@ bool MatlabOperationWidget::
     Signal::pOperation om;
     foreach(Signal::Operation* c, this->operation->outputs())
     {
-        BOOST_ASSERT(c->source().get() == this->operation);
+        EXCEPTION_ASSERT(c->source().get() == this->operation);
         om = c->source();
     }
     if (!om)
@@ -374,7 +374,7 @@ void MatlabOperationWidget::
 void MatlabOperationWidget::
         announceInvalidSamples()
 {
-    BOOST_ASSERT(operation);
+    EXCEPTION_ASSERT(operation);
 
     Signal::Intervals invalid_returns = operation->invalid_returns();
     Signal::Intervals invalid_samples = operation->invalid_samples();
@@ -578,6 +578,8 @@ void MatlabOperationWidget::
 void MatlabOperationWidget::
         showOutput()
 {
+    QProcess* pid_at_entry = pid;
+
     if (0 == octaveWindow && text != 0)
         return;
 
@@ -627,12 +629,18 @@ void MatlabOperationWidget::
     if (hasCrashed)
         octaveWindow->show();
 
-    QByteArray ba = pid->readAllStandardOutput();
-    QString s( ba );
-    text->moveCursor( QTextCursor::End );
-    text->insertPlainText( s );
-    text->moveCursor( QTextCursor::End );
-    TaskInfo("Matlab output (%p): %s", this, s.replace("\r","").toStdString().c_str());
+    QProcess* senderprocess = dynamic_cast<QProcess*>(this->sender());
+    if (pid)
+    {
+        QByteArray ba = pid->readAllStandardOutput();
+        QString s( ba );
+        text->moveCursor( QTextCursor::End );
+        text->insertPlainText( s );
+        text->moveCursor( QTextCursor::End );
+        TaskInfo("Matlab output (%p): %s", this, s.replace("\r","").toStdString().c_str());
+    }
+    else
+        TaskInfo("Couldn't get output because the process object has been destroyed");
 }
 
 

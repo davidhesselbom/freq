@@ -31,13 +31,13 @@ std::string Bandpass::
 }
 
 
-void Bandpass::
+bool Bandpass::
         operator()( Tfr::Chunk& c )
 {
     TIME_BANDPASS TaskTimer tt("%s (save %sside) on %s",
                                name().c_str(),
                                _save_inside?"in":"out",
-                               c.getInversedInterval().toString().c_str());
+                               c.getInterval().toString().c_str());
 
     float minf = min(_f1, _f2);
     float maxf = max(_f1, _f2);
@@ -49,11 +49,11 @@ void Bandpass::
     // assuming STFT is not redundant (meaning that R2C and C2R transforms are being used)
     unsigned window = (unsigned)(c.freqAxis.max_frequency_scalar*2 + 0.5f);
     unsigned actualSize = window/2 + 1;
-    unsigned windows = c.transform_data->getNumberOfElements().width / actualSize;
+    unsigned windows = c.transform_data->size().width / actualSize;
 
-    BOOST_ASSERT( c.nScales() == actualSize );
-    BOOST_ASSERT( c.nSamples() == windows );
-    BOOST_ASSERT( ((Tfr::StftChunk&)c).window_size() == window );
+    EXCEPTION_ASSERT( c.nScales() == actualSize );
+    EXCEPTION_ASSERT( c.nSamples() == windows );
+    EXCEPTION_ASSERT( ((Tfr::StftChunk&)c).window_size() == window );
 
     TIME_BANDPASS TaskInfo("window = %u, actualSize = %u, windows = %u, a=%g, b=%g",
                                window, actualSize, windows, a, b);
@@ -83,6 +83,8 @@ void Bandpass::
                 p[t*actualSize + s] = zero;
         }
     }
+
+    return true;
 }
 
 } // namespace Filters

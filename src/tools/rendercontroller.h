@@ -14,10 +14,12 @@ class QToolButton;
 
 namespace Tfr { class Transform; }
 
-namespace Ui { class ComboBoxAction; }
+namespace Ui { class ComboBoxAction; class MainWindow; }
 
 namespace Tools
 {
+    namespace Widgets { class ValueSlider; }
+
     class SaweDll RenderController: public QObject // This should not be a QWidget. User input is handled by tools.
     {
         Q_OBJECT
@@ -33,9 +35,11 @@ namespace Tools
         // ComboBoxAction color
         void receiveSetRainbowColors();
         void receiveSetGrayscaleColors();
+        void receiveSetBlackGrayscaleColors();
         void receiveSetColorscaleColors();
         void receiveSetGreenRedColors();
         void receiveSetGreenWhiteColors();
+        void receiveSetGreenColors();
 
         // Toggle Buttons
         void receiveToogleHeightlines(bool);
@@ -48,8 +52,8 @@ namespace Tools
         void receiveToggleCursorMarker(bool);
 
         // Sliders
-        void receiveSetYScale(int);
-        void receiveSetTimeFrequencyResolution(int);
+        void receiveSetYScale(qreal);
+        void receiveSetTimeFrequencyResolution(qreal);
         void yscaleIncrease();
         void yscaleDecrease();
         void tfresolutionIncrease();
@@ -78,17 +82,25 @@ namespace Tools
         void receiveFifthAmplitude();
 
         void transformChanged();
+        void updateTransformParams();
 
     private slots:
-        void clearCachedHeightmap();
+        void deleteTarget();
         void updateFreqAxis();
+        void updateAmplitudeAxis();
         void updateChannels();
         void reroute();
+        void clearCaches();
 
     private:
         void stateChanged();
+        void setCurrentFilterTransform(Tfr::pTransform);
         Signal::PostSink* setBlockFilter(Signal::Operation* blockfilter);
+        Tfr::Filter* currentFilter();
         Tfr::Transform* currentTransform();
+        float headSampleRate();
+        float currentTransformMinHz();
+        ::Ui::MainWindow* getItems();
 
         QPointer<RenderView> view;
 
@@ -109,8 +121,8 @@ namespace Tools
         QToolButton* channelselector;
         Ui::ComboBoxAction* transform;
 
-        QSlider * yscale;
-        QSlider * tf_resolution;
+        Widgets::ValueSlider* yscale;
+        Widgets::ValueSlider* tf_resolution;
 
         void setupGui();
         void windowLostFocus();

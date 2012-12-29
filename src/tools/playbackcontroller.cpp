@@ -155,11 +155,7 @@ void PlaybackController::
     Signal::PostSink* postsink_operations = _view->model->playbackTarget->post_sink();
     if ( postsink_operations->sinks().empty() || postsink_operations->filter() != filter )
     {
-        int playback_device;
-        {
-            QSettings settings;
-            playback_device = settings.value("outputdevice", -1).toInt();
-        }
+        int playback_device = QSettings().value("outputdevice", -1).toInt();
 
         model()->adapter_playback.reset();
         model()->adapter_playback.reset( new Adapters::Playback( playback_device ));
@@ -167,7 +163,7 @@ void PlaybackController::
         std::vector<Signal::pOperation> sinks;
         postsink_operations->sinks( sinks ); // empty
         sinks.push_back( model()->adapter_playback );
-        sinks.push_back( Signal::pOperation( new Adapters::WriteWav( _view->model->selection_filename )) );
+        //sinks.push_back( Signal::pOperation( new Adapters::WriteWav( _view->model->selection_filename )) );
 
         postsink_operations->filter( Signal::pOperation() );
         postsink_operations->sinks( sinks );
@@ -175,8 +171,7 @@ void PlaybackController::
 
         //Signal::Intervals expected_data = ~filter->zeroed_samples_recursive();
         Signal::Intervals expected_data = ~filter->zeroed_samples();
-        expected_data &= Signal::Interval(0, filter->number_of_samples());
-        postsink_operations->invalidate_samples( expected_data );
+        model()->playback ()->setExpectedSamples (expected_data.fetchFirstInterval ());
     }
     else
     {

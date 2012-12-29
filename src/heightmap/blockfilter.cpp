@@ -10,11 +10,11 @@
 #include "tfr/stft.h"
 
 #include <computationkernel.h>
-#include <GlException.h>
 #include <TaskTimer.h>
 #include <Statistics.h>
 
 #include <boost/foreach.hpp>
+#include <boost/format.hpp>
 
 #include <float.h>
 
@@ -31,24 +31,35 @@
 #define DEBUG_CWTTOBLOCK if(0)
 
 using namespace Tfr;
+using namespace boost;
 
 namespace Heightmap
 {
 
 BlockFilter::
         BlockFilter( Collection* collection )
-            :
-            _collection (collection)
 {
+    _collections.resize (1);
+    _collections[0] = collection;
 }
 
 
-void BlockFilter::
-        applyFilter(ChunkAndInverse& pchunk )
+BlockFilter::
+        BlockFilter( std::vector<boost::shared_ptr<Collection> >* collections )
 {
+    _collections.resize (collections->size ());
+    for (unsigned c=0; c<collections->size (); ++c)
+        _collections[c] = (*collections)[c].get();
+}
+
+
+bool BlockFilter::
+        applyFilter( ChunkAndInverse& pchunk )
+{
+    Collection* collection = _collections[pchunk.channel];
     Tfr::Chunk& chunk = *pchunk.chunk;
     Signal::Interval chunk_interval = chunk.getCoveredInterval();
-    std::vector<pBlock> intersecting_blocks = _collection->getIntersectingBlocks( chunk_interval, false );
+    std::vector<pBlock> intersecting_blocks = collection->getIntersectingBlocks( chunk_interval, false );
     TIME_BLOCKFILTER TaskTimer tt("BlockFilter %s [%g %g] Hz, intersects with %u visible blocks",
         chunk_interval.toString().c_str(), chunk.minHz(), chunk.maxHz(), intersecting_blocks.size());
 
@@ -58,10 +69,10 @@ void BlockFilter::
             continue;
 
 #ifndef SAWE_NO_MUTEX
-        if (_collection->constructor_thread().isSameThread())
+        if (collection->constructor_thread().isSameThread())
         {
 #endif
-            mergeChunk( block, chunk, block->glblock->height()->data );
+            mergeChunk( block, pchunk, block->glblock->height()->data );
 
             TIME_BLOCKFILTER ComputationCheckError();
 #ifndef SAWE_NO_MUTEX
@@ -70,14 +81,14 @@ void BlockFilter::
         {
             QMutexLocker l(&block->cpu_copy_mutex);
             if (!block->cpu_copy)
-                throw std::logic_error(
-                    "Multi threaded code is not usefull unless using multiple "
-                    "GPUs, and multi GPU code is not implemented yet.");
+            {
+                TaskInfo("%s", block->reference ().toString ().c_str ());
+                EXCEPTION_ASSERT( block->cpu_copy );
+            }
 
-            mergeChunk( block, chunk, block->cpu_copy );
+            mergeChunk( block, pchunk, block->cpu_copy );
 
-            block->cpu_copy->getCpuMemory();
-            block->cpu_copy->freeUnused();
+            block->cpu_copy->OnlyKeepOneStorage<CpuMemoryStorage>();
 
             block->new_data_available = true;
         }
@@ -85,17 +96,17 @@ void BlockFilter::
     }
 
 
-    pchunk.inverse.reset( new Signal::Buffer(chunk_interval.first, chunk_interval.count(), pchunk.inverse->sample_rate) );
-
     TIME_BLOCKFILTER ComputationSynchronize();
+
+    return false;
 }
 
 
 void BlockFilter::
-        mergeColumnMajorChunk( pBlock block, Chunk& chunk, Block::pData outData, float normalization_factor )
+        mergeColumnMajorChunk( pBlock block, const ChunkAndInverse& pchunk, Block::pData outData, float normalization_factor )
 {
-    TIME_BLOCKFILTER ComputationSynchronize();
-
+    Collection* collection = _collections[pchunk.channel];
+    Tfr::Chunk& chunk = *pchunk.chunk;
     Region r = block->getRegion();
 
     Position chunk_a, chunk_b;
@@ -110,9 +121,9 @@ void BlockFilter::
     Signal::Interval transfer = usableInInterval&blockInterval;
 
 #ifdef _DEBUG
-    if (!spannedBlockSamples && transfer)
+    if (!transfer || !spannedBlockSamples)
     {
-        int stopp = 1;
+        TaskInfo("%s", str(format("Warning: !transfer || !spannedBlockSamples.~\nspannedBlockSamples=%s\ntransfer=%s\nusableInInterval=%s\nblockInterval=%s") % spannedBlockSamples.toString() % transfer.toString() % usableInInterval.toString () % blockInterval.toString ()).c_str());
     }
 #endif
 
@@ -147,11 +158,11 @@ void BlockFilter::
         Signal::Interval usableInInterval2 = block->reference().spannedElementsInterval(inInterval, spannedBlockSamples2);
     }
 
-    BOOST_ASSERT( s2 >= t2 );
-    BOOST_ASSERT( s1 <= t1 );
-    BOOST_ASSERT(blockSpannedBlockSamples.count() == block->reference().samplesPerBlock());
-    BOOST_ASSERT(usableBlockInterval == blockInterval);
-    BOOST_ASSERT(usableInInterval.first >= inInterval.first || usableInInterval.last <= inInterval.last);
+    EXCEPTION_ASSERT( s2 >= t2 );
+    EXCEPTION_ASSERT( s1 <= t1 );
+    EXCEPTION_ASSERT(blockSpannedBlockSamples.count() == block->reference().samplesPerBlock());
+    EXCEPTION_ASSERT(usableBlockInterval == blockInterval);
+    EXCEPTION_ASSERT(usableInInterval.first >= inInterval.first || usableInInterval.last <= inInterval.last);
 #endif
 
     chunk_a.time = inInterval.first/chunk.original_sample_rate;
@@ -162,6 +173,8 @@ void BlockFilter::
     chunk_a.scale = 0;
     chunk_b.scale = 1;
 
+    {
+    TIME_BLOCKFILTER TaskTimer tt("resampleStft");
     ::resampleStft( chunk.transform_data,
                     chunk.nScales(),
                     chunk.nSamples(),
@@ -172,30 +185,34 @@ void BlockFilter::
                   ResampleArea( r.a.time, r.a.scale,
                                r.b.time, r.b.scale ),
                   chunk.freqAxis,
-                  _collection->display_scale(),
-                  _collection->amplitude_axis(),
+                  collection->display_scale(),
+                  collection->amplitude_axis(),
                   normalization_factor,
                   true);
+    TIME_BLOCKFILTER ComputationSynchronize();
+    }
 
+    DEBUG_CWTTOBLOCK TaskInfo("Validating %s in %s (was %s)", transfer.toString ().c_str (), block->reference ().toString ().c_str (), block->valid_samples.toString ().c_str ());
     block->valid_samples |= transfer;
     block->non_zero |= transfer;
-
-    TIME_BLOCKFILTER ComputationSynchronize();
 }
 
 
 void BlockFilter::
-        mergeRowMajorChunk( pBlock block, Chunk& chunk, Block::pData outData,
+        mergeRowMajorChunk( pBlock block, const ChunkAndInverse& pchunk, Block::pData outData,
                             bool full_resolution, ComplexInfo complex_info,
                             float normalization_factor, bool enable_subtexel_aggregation)
 {
+    Collection* collection = _collections[pchunk.channel];
+    Tfr::Chunk& chunk = *pchunk.chunk;
+
     ComputationCheckError();
 
     //unsigned cuda_stream = 0;
 
     // Find out what intervals that match
     Signal::Interval outInterval = block->getInterval();
-    Signal::Interval inInterval = chunk.getInterval();
+    Signal::Interval inInterval = chunk.getCoveredInterval();
 
     // don't validate more texels than we have actual support for
     //Signal::Interval usableInInterval = block->ref.spannedElementsInterval(inInterval);
@@ -243,8 +260,8 @@ void BlockFilter::
 
     float merge_first_scale = r.a.scale;
     float merge_last_scale = r.b.scale;
-    float chunk_first_scale = _collection->display_scale().getFrequencyScalar( chunk.minHz() );
-    float chunk_last_scale = _collection->display_scale().getFrequencyScalar( chunk.maxHz() );
+    float chunk_first_scale = collection->display_scale().getFrequencyScalar( chunk.minHz() );
+    float chunk_last_scale = collection->display_scale().getFrequencyScalar( chunk.maxHz() );
 
     merge_first_scale = std::max( merge_first_scale, chunk_first_scale );
     merge_last_scale = std::min( merge_last_scale, chunk_last_scale );
@@ -276,7 +293,7 @@ void BlockFilter::
     DEBUG_CWTTOBLOCK TaskInfo("merge_first_scale = %g", merge_first_scale);
     DEBUG_CWTTOBLOCK TaskInfo("merge_last_scale = %g", merge_last_scale);
     DEBUG_CWTTOBLOCK TaskInfo("chunk.nScales() = %u", chunk.nScales());
-    DEBUG_CWTTOBLOCK TaskInfo("_collection->scales_per_block() = %u", _collection->scales_per_block());
+    DEBUG_CWTTOBLOCK TaskInfo("_collection->scales_per_block() = %u", collection->scales_per_block());
 
 
     DEBUG_CWTTOBLOCK {
@@ -319,7 +336,7 @@ void BlockFilter::
             s.scale / schunk.scale * chunk.nScales() + .5f)
         );
 
-    BOOST_ASSERT( chunk.first_valid_sample+chunk.n_valid_samples <= chunk.transform_data->getNumberOfElements().width );
+    EXCEPTION_ASSERT( chunk.first_valid_sample+chunk.n_valid_samples <= chunk.transform_data->size().width );
 
     enable_subtexel_aggregation &= full_resolution;
 
@@ -329,6 +346,8 @@ void BlockFilter::
 #endif
 
     // Invoke kernel execution to merge chunk into block
+    {
+    TIME_BLOCKFILTER TaskTimer tt("blockResampleChunk");
     ::blockResampleChunk( chunk.transform_data,
                      outData,
                      ValidInterval( chunk.first_valid_sample, chunk.first_valid_sample+chunk.n_valid_samples ),
@@ -340,15 +359,14 @@ void BlockFilter::
                                   r.b.time, r.b.scale ),
                      complex_info,
                      chunk.freqAxis,
-                     _collection->display_scale(),
-                     _collection->amplitude_axis(),
+                     collection->display_scale(),
+                     collection->amplitude_axis(),
                      normalization_factor,
                      enable_subtexel_aggregation
                      );
-
+    }
 
     ComputationCheckError();
-    GlException_CHECK_ERROR();
 
     if( full_resolution )
     {
@@ -375,9 +393,10 @@ void BlockFilter::
 unsigned BlockFilter::
         smallestOk(const Signal::Interval& I)
 {
-    float FS = _collection->target->sample_rate();
+    Collection* collection = _collections[0];
+    float FS = collection->target->sample_rate();
     long double min_fs = FS;
-    std::vector<pBlock> intersections = _collection->getIntersectingBlocks( I?I:_collection->invalid_samples(), true );
+    std::vector<pBlock> intersections = collection->getIntersectingBlocks( I?I:collection->invalid_samples(), true );
     BOOST_FOREACH( pBlock b, intersections )
     {
         if (!(b->getInterval() - b->valid_samples))
@@ -405,18 +424,20 @@ CwtToBlock::
 
 
 void CwtToBlock::
-        mergeChunk( pBlock block, Chunk& chunk, Block::pData outData )
+        mergeChunk( pBlock block, const ChunkAndInverse& chunk, Block::pData outData )
 {
     Cwt* cwt = dynamic_cast<Cwt*>(transform().get());
-    BOOST_ASSERT( cwt );
+    EXCEPTION_ASSERT( cwt );
     bool full_resolution = cwt->wavelet_time_support() >= cwt->wavelet_default_time_support();
-    float normalization_factor = cwt->nScales( chunk.original_sample_rate )/cwt->sigma();
+    float normalization_factor = cwt->nScales( chunk.chunk->original_sample_rate )/cwt->sigma();
 
-    CwtChunk& chunks = *dynamic_cast<CwtChunk*>( &chunk );
+    CwtChunk& chunks = *dynamic_cast<CwtChunk*>( chunk.chunk.get () );
 
     BOOST_FOREACH( const pChunk& chunkpart, chunks.chunks )
     {
-        mergeRowMajorChunk( block, *chunkpart, outData,
+        ChunkAndInverse c = chunk;
+        c.chunk = chunkpart;
+        mergeRowMajorChunk( block, c, outData,
                             full_resolution, complex_info, normalization_factor, renderer->redundancy() <= 1 );
     }
 }
@@ -441,10 +462,10 @@ StftToBlock::
 
 
 void StftToBlock::
-        mergeChunk( pBlock block, Chunk& chunk, Block::pData outData )
+        mergeChunk( pBlock block, const ChunkAndInverse& chunk, Block::pData outData )
 {
-    StftChunk* stftchunk = dynamic_cast<StftChunk*>(&chunk);
-    BOOST_ASSERT( stftchunk );
+    StftChunk* stftchunk = dynamic_cast<StftChunk*>(chunk.chunk.get ());
+    EXCEPTION_ASSERT( stftchunk );
     float normalization_factor = 1.f/sqrtf(stftchunk->window_size());
     mergeColumnMajorChunk(block, chunk, outData, normalization_factor);
 }
@@ -457,12 +478,11 @@ CepstrumToBlock::
             :
             BlockFilterImpl<Tfr::CepstrumFilter>(collections)
 {
-    //_try_shortcuts = false;
 }
 
 
 void CepstrumToBlock::
-        mergeChunk( pBlock block, Chunk& chunk, Block::pData outData )
+        mergeChunk( pBlock block, const ChunkAndInverse& chunk, Block::pData outData )
 {
     float normalization_factor = 1.f; // already normalized when return from Cepstrum.cpp
     mergeColumnMajorChunk(block, chunk, outData, normalization_factor);
@@ -476,19 +496,22 @@ DrawnWaveformToBlock::
             :
             BlockFilterImpl<Tfr::DrawnWaveformFilter>(collections)
 {
-    //_try_shortcuts = false;
 }
 
 
-ChunkAndInverse DrawnWaveformToBlock::
-        computeChunk( const Signal::Interval& I )
+Signal::Interval DrawnWaveformToBlock::
+        requiredInterval( const Signal::Interval& I, Tfr::pTransform t )
 {
-    std::vector<pBlock> intersecting_blocks = _collection->getIntersectingBlocks( I, false );
-
     Signal::Intervals missingSamples;
-    BOOST_FOREACH( pBlock block, intersecting_blocks)
+    for (unsigned c=0; c<_collections.size (); ++c)
     {
-        missingSamples |= block->getInterval() - block->valid_samples;
+        Collection* collection = _collections[c];
+        std::vector<pBlock> intersecting_blocks = collection->getIntersectingBlocks( I, false );
+
+        BOOST_FOREACH( pBlock block, intersecting_blocks)
+        {
+            missingSamples |= block->getInterval() - block->valid_samples;
+        }
     }
 
     missingSamples &= I;
@@ -501,12 +524,18 @@ ChunkAndInverse DrawnWaveformToBlock::
         first.first = missingSamples.spannedInterval().first;
         first.last = first.first + 1;
 
-        BOOST_FOREACH( pBlock block, intersecting_blocks)
+        for (unsigned c=0; c<_collections.size (); ++c)
         {
-            if (((block->getInterval() - block->valid_samples) & first).empty() )
-                continue;
+            Collection* collection = _collections[c];
+            std::vector<pBlock> intersecting_blocks = collection->getIntersectingBlocks( I, false );
 
-            largest_fs = std::max(largest_fs, block->sample_rate());
+            BOOST_FOREACH( pBlock block, intersecting_blocks)
+            {
+                if (((block->getInterval() - block->valid_samples) & first).empty() )
+                    continue;
+
+                largest_fs = std::max(largest_fs, block->sample_rate());
+            }
         }
 
         DrawnWaveform* wt = dynamic_cast<DrawnWaveform*>(transform().get());
@@ -515,23 +544,23 @@ ChunkAndInverse DrawnWaveformToBlock::
         toCompute = missingSamples.fetchFirstInterval();
     }
 
-    return Tfr::DrawnWaveformFilter::computeChunk(toCompute);
+    return Tfr::DrawnWaveformFilter::requiredInterval (toCompute, t);
 }
 
+
 void DrawnWaveformToBlock::
-        mergeChunk( pBlock block, Chunk& chunk, Block::pData outData )
+        mergeChunk( pBlock block, const ChunkAndInverse& pchunk, Block::pData outData )
 {
-    BOOST_FOREACH( boost::shared_ptr<Collection> c, *_collections )
+    Collection* c = _collections[pchunk.channel];
+    Chunk& chunk = *pchunk.chunk;
+    Tfr::FreqAxis fa = c->display_scale();
+    if (fa.min_hz != chunk.freqAxis.min_hz || fa.axis_scale != Tfr::AxisScale_Linear)
     {
-        Tfr::FreqAxis fa = c->display_scale();
-        if (fa.min_hz != chunk.freqAxis.min_hz || fa.axis_scale != Tfr::AxisScale_Linear)
-        {
-            BOOST_ASSERT( fa.max_frequency_scalar == 1.f );
-            fa.axis_scale = Tfr::AxisScale_Linear;
-            fa.min_hz = chunk.freqAxis.min_hz;
-            fa.f_step = -2*fa.min_hz;
-            c->display_scale( fa );
-        }
+        EXCEPTION_ASSERT( fa.max_frequency_scalar == 1.f );
+        fa.axis_scale = Tfr::AxisScale_Linear;
+        fa.min_hz = chunk.freqAxis.min_hz;
+        fa.f_step = -2*fa.min_hz;
+        c->display_scale( fa );
     }
 
 
@@ -542,7 +571,7 @@ void DrawnWaveformToBlock::
     if (dwc->block_fs != block_fs)
         return;
 
-    mergeRowMajorChunk(block, chunk, outData, true, ComplexInfo_Amplitude_Non_Weighted, 1.f, false);
+    mergeRowMajorChunk(block, pchunk, outData, true, ComplexInfo_Amplitude_Non_Weighted, 1.f, false);
 }
 
 } // namespace Heightmap

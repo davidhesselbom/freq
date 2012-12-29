@@ -15,14 +15,16 @@ Chunk::
     sample_rate(0)
 {}
 
-unsigned Chunk::
-        offset(unsigned sample, unsigned f_index)
+Signal::IntervalType Chunk::
+        offset(Signal::IntervalType sample, int f_index)
 {
     if (sample >= nSamples())
         sample =  nSamples()-1;
 
-    if (f_index >= nScales())
+    if (f_index >= (int)nScales())
         f_index =  nScales()-1;
+    else if (f_index < 0)
+        f_index = 0;
 
     switch(order) {
     case Order_row_major:
@@ -54,23 +56,14 @@ ChunkElement Chunk::
 
 
 Signal::Interval Chunk::
-        getInversedInterval() const
-{
-    return Signal::Interval(
-        chunk_offset.asInteger() + first_valid_sample,
-        chunk_offset.asInteger() + first_valid_sample + n_valid_samples
-    );
-}
-
-
-Signal::Interval Chunk::
         getInterval() const
 {
     double scale = original_sample_rate/sample_rate;
-    return Signal::Interval(
+    Signal::Interval I(
             std::floor((chunk_offset + first_valid_sample).asFloat() * scale + 0.5),
             std::floor((chunk_offset + first_valid_sample + n_valid_samples).asFloat() * scale + 0.5)
     );
+    return I;
 }
 
 

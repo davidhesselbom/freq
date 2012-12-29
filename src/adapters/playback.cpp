@@ -6,8 +6,8 @@
 
 #include "cpumemorystorage.h"
 
-#define TIME_PLAYBACK
-//#define TIME_PLAYBACK if(0)
+//#define TIME_PLAYBACK
+#define TIME_PLAYBACK if(0)
 
 using namespace std;
 using namespace boost::posix_time;
@@ -16,12 +16,12 @@ namespace Adapters {
 
 Playback::
         Playback( int outputDevice )
-:   _first_buffer_size(0),
+:   _data(0),
+    _first_buffer_size(0),
+    _playback_itr(0),
     _output_device(0),
     _is_interleaved(false)
 {
-    _data.setNumChannels(0);
-
     portaudio::AutoSystem autoSys;
     portaudio::System &sys = portaudio::System::instance();
 
@@ -158,10 +158,12 @@ float Playback::
     float dt = d.total_milliseconds()*0.001f;
     float t = dt;
     t += _data.getInterval().first / sample_rate();
-    t -= 0.08f;
+
 #ifdef _WIN32
-    t -= outputLatency();
+// TODO deal with output latency some other way. Such as adjusting 'dt' and keep updating in playbackview.
+//    t -= outputLatency();
 #endif
+
     return std::max(0.f, t);
 }
 
@@ -212,7 +214,7 @@ void Playback::
     // Make sure the buffer is moved over to CPU memory and that GPU memory is released
     // (because the audio stream callback is executed from a different thread
     // it can't access the GPU memory)
-    buffer->waveform_data()->OnlyKeepOneStorage<CpuMemoryStorage>();
+    buffer->release_extra_resources ();
 
     _data.putExpectedSamples( buffer );
 
@@ -227,6 +229,14 @@ void Playback::
     }
 
     onFinished();
+}
+
+
+void Playback::
+        setExpectedSamples(const Signal::Interval &I)
+{
+    _expected = I;
+    invalidate_samples (_expected);
 }
 
 
@@ -288,10 +298,10 @@ void Playback::
                         _playback_itr,
                         Signal::Interval::IntervalType_MAX);
 
-    _data.invalidate_samples( s & whatsLeft );
-
     if (0 == _data.num_channels())
-        _data.setNumChannels( source()->num_channels() );
+        _data = Signal::SinkSource( source()->num_channels() );
+
+    _data.invalidate_samples( s & whatsLeft );
 }
 
 
@@ -302,23 +312,10 @@ unsigned Playback::
 }
 
 
-void Playback::
-        set_channel(unsigned c)
-{
-    // If more channels are requested for playback than the output device has channels available,
-    // then let the last channel requested go into the last channel available and discard other
-    // superfluous channels
-    if (c >= num_channels())
-        c = num_channels() - 1;
-
-    _data.set_channel( c );
-}
-
-
 Signal::Intervals Playback::
         invalid_samples()
 {
-    return _data.invalid_samples();
+    return _data.invalid_samples() & getInterval() & _expected;
 }
 
 
@@ -351,7 +348,7 @@ void Playback::
         if (available_channels<requested_number_of_channels)
         {
             requested_number_of_channels = available_channels;
-            _data.setNumChannels( requested_number_of_channels );
+            _data = Signal::SinkSource( requested_number_of_channels );
         }
 
         portaudio::Device& device = sys.deviceByIndex(_output_device);
@@ -432,7 +429,7 @@ bool Playback::
     if (_data.empty())
         return false;
 
-    if (_data.invalid_samples())
+    if (invalid_samples())
         return false;
 
     return time()*_data.sample_rate() > _data.getInterval().last;
@@ -444,7 +441,7 @@ bool Playback::
 {
     unsigned nAccumulated_samples = _data.number_of_samples();
 
-    if (!_data.empty() && !_data.invalid_samples()) {
+    if (!_data.empty() && !invalid_samples()) {
         TIME_PLAYBACK TaskInfo("Not underfed");
         return false; // No more expected samples, not underfed
     }
@@ -467,7 +464,7 @@ bool Playback::
     if (0==marker)
         marker = _data.getInterval().first;
 
-    Signal::Interval cov = _data.invalid_samples().spannedInterval();
+    Signal::Interval cov = invalid_samples().spannedInterval();
     float time_left =
             (cov.last - marker) / _data.sample_rate();
 
@@ -552,15 +549,23 @@ int Playback::
                  const PaStreamCallbackTimeInfo * /*timeInfo*/,
                  PaStreamCallbackFlags /*statusFlags*/)
 {
-    BOOST_ASSERT( outputBuffer );
+    float FS;
+    TIME_PLAYBACK FS = _data.sample_rate();
+    TIME_PLAYBACK TaskTimer("Playback::readBuffer Reading [%d, %d)%u# from %d. [%g, %g)%g s",
+                           (int)_playback_itr, (int)(_playback_itr+framesPerBuffer),
+                           (unsigned)framesPerBuffer, (int)_data.number_of_samples(),
+                           _playback_itr/ FS, (_playback_itr + framesPerBuffer)/ FS,
+                           framesPerBuffer/ FS);
+
     if (!_data.empty() && _playback_itr == _data.getInterval().first) {
         _startPlay_timestamp = microsec_clock::local_time();
     }
 
     unsigned nchannels = num_channels();
+    Signal::pBuffer mb = _data.readFixedLength( Signal::Interval(_playback_itr, _playback_itr+framesPerBuffer) );
     for (unsigned c=0; c<nchannels; ++c)
     {
-        Signal::pBuffer b = _data.channel(c).readFixedLength( Signal::Interval(_playback_itr, _playback_itr+framesPerBuffer) );
+        Signal::pMonoBuffer b = mb->getChannel (c);
         float *p = CpuMemoryStorage::ReadOnly<1>( b->waveform_data() ).ptr();
         if (_is_interleaved)
         {
@@ -583,26 +588,17 @@ int Playback::
 
     _playback_itr += framesPerBuffer;
 
-    const char* msg = "";
     int ret = paContinue;
     if (_data.getInterval().last + (Signal::IntervalType)framesPerBuffer < _playback_itr ) {
-        msg = ". DONE";
+        TaskInfo("DONE");
         ret = paComplete;
     } else {
         if (_data.getInterval().last < _playback_itr ) {
-            msg = ". PAST END";
+            TaskInfo("PAST END");
             // TODO if !_data.invalid_samples().empty() should pause playback here and continue when data is made available
         } else {
         }
     }
-
-    float FS;
-    TIME_PLAYBACK FS = _data.sample_rate();
-    TIME_PLAYBACK TaskInfo("Playback::readBuffer Reading [%d, %d)%u# from %d. [%g, %g)%g s%s",
-                           (int)_playback_itr, (int)(_playback_itr+framesPerBuffer),
-                           (unsigned)framesPerBuffer, (int)_data.number_of_samples(),
-                           _playback_itr/ FS, (_playback_itr + framesPerBuffer)/ FS,
-                           framesPerBuffer/ FS, msg);
 
     return ret;
 }

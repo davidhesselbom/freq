@@ -41,14 +41,13 @@ public:
     IntervalType first, last;
     IntervalType count() const { return valid() ? last - first : 0; }
 
-    bool valid() const { return first <= last; }
-    Interval operator|(const Interval& r) { Interval I(*this); return I|=r; }
-    Interval& operator|=(const Interval& r);
-    Interval operator&(const Interval& r) { Interval I(*this); return I&=r; }
-    Interval& operator&=(const Interval& r);
-    bool operator==(const Interval& r) const;
-    bool operator!=(const Interval& r) const;
-    operator   bool() const { return 0 < count(); }
+    bool        valid       () const { return first <= last; }
+    Interval    spanned     (const Interval& r) const;
+    Interval    operator&   (const Interval& r) const { Interval I(*this); return I&=r; }
+    Interval&   operator&=  (const Interval& r);
+    bool        operator==  (const Interval& r) const;
+    bool        operator!=  (const Interval& r) const;
+    operator    bool        () const { return 0 < count(); }
 
     std::string toString() const;
 };
@@ -90,10 +89,10 @@ public:
     Intervals& operator &= (const Interval&);
     Intervals  operator ^  (const Intervals& b) const { return Intervals(*this)^=b; }
     Intervals& operator ^= (const Intervals&);
-    Intervals operator >> (const IntervalType& b) const { return Intervals(*this)>>=b; }
-    Intervals& operator >>= (const IntervalType&);
-    Intervals operator << (const IntervalType& b) const { return Intervals(*this)<<=b; }
-    Intervals& operator <<= (const IntervalType&);
+    Intervals  operator >> (const IntervalType& b) const { return Intervals(*this)>>=b; }
+    Intervals& operator >>=(const IntervalType&);
+    Intervals  operator << (const IntervalType& b) const { return Intervals(*this)<<=b; }
+    Intervals& operator <<=(const IntervalType&);
     Intervals& operator *= (const float& scale);
     Intervals  operator ~  () const { return inverse(); }
     operator   bool        () const { return !empty(); }
@@ -105,6 +104,7 @@ public:
     Intervals               enlarge( IntervalType dt ) const;
     Intervals               shrink( IntervalType dt ) const;
     IntervalType            count() const;
+    int                     numSubIntervals() const { return base::size(); }
     bool                    testSample( IntervalType const &p) const;
 
     std::string             toString() const;
@@ -125,12 +125,13 @@ private:
     base::iterator firstIntersecting( const Interval& b );
 };
 
-std::ostream& operator<< (std::ostream& o, const Interval& I);
-std::ostream& operator<< (std::ostream& o, const Intervals& I);
-Intervals  operator |  (const Interval& a, const Intervals& b);
-Intervals  operator -  (const Interval& a, const Intervals& b);
-Intervals  operator &  (const Interval& a, const Intervals& b);
-Intervals  operator ^  (const Interval& a, const Intervals& b);
+SaweDll std::ostream& operator<< (std::ostream& o, const Interval& I);
+SaweDll std::ostream& operator<< (std::ostream& o, const Intervals& I);
+SaweDll Intervals  operator |  (const Interval& a, const Intervals& b);
+SaweDll Intervals  operator -  (const Interval& a, const Intervals& b);
+SaweDll Intervals  operator &  (const Interval& a, const Intervals& b);
+SaweDll Intervals  operator ^  (const Interval& a, const Intervals& b);
+SaweDll Intervals  operator |  (const Interval& a, const Interval& b);
 
 } // namespace Signal
 

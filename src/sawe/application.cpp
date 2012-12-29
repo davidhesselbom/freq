@@ -28,8 +28,6 @@
 
 
 #ifdef USE_CUDA
-// gpumisc
-#include <gpucpudatacollection.h>
 
 // cuda
 #include "cuda.h"
@@ -99,6 +97,9 @@ Application::
         setApplicationName("Sonic AWE");
     #endif
 
+    if (!prevent_log_system_and_execute_args)
+        logSystemInfo(argc, argv);
+
     Sawe::Configuration::resetDefaultSettings();
     Sawe::Configuration::parseCommandLineOptions(argc, argv);
 
@@ -112,7 +113,6 @@ Application::
 
     if (!prevent_log_system_and_execute_args)
     {
-        logSystemInfo(argc, argv);
         execute_command_line_options(); // will call 'exit(0)' on invalid arguments
     }
 }
@@ -133,16 +133,28 @@ void Application::
      logSystemInfo(int& argc, char **argv)
 {
     TaskInfo ti("Version: %s", Sawe::Configuration::version_string().c_str());
+    boost::gregorian::date today = boost::gregorian::day_clock::local_day();
+    boost::gregorian::date_facet* facet(new boost::gregorian::date_facet("%A %B %d, %Y"));
+    ti.tt().getStream().imbue(std::locale(std::cout.getloc(), facet));
+    ti.tt().getStream() << " started on " << today << endl;
+
+    TaskInfo("Build timestamp for %s: %s, %s. Revision %s",
+        Sawe::Configuration::uname().c_str(),
+        Sawe::Configuration::build_date().c_str(), Sawe::Configuration::build_time().c_str(),
+        Sawe::Configuration::revision().c_str());
+
+    {
+        TaskInfo ti2("%u command line argument%s", argc, argc==1?"":"s");
+        for (int i=0; i<argc; ++i)
+            TaskInfo("%s", argv[i]);
+    }
+
     TaskInfo("Organization: %s", organizationName().toStdString().c_str());
     TaskInfo("Organization domain: %s", organizationDomain().toStdString().c_str());
     TaskInfo("Application name: %s", applicationName().toStdString().c_str());
     TaskInfo("OS: %s", Sawe::Configuration::operatingSystemName().c_str());
     TaskInfo("domain: %s", QHostInfo::localDomainName().toStdString().c_str());
     TaskInfo("hostname: %s", QHostInfo::localHostName().toStdString().c_str());
-    TaskInfo("Build timestamp for %s: %s, %s. Revision %s",
-        Sawe::Configuration::uname().c_str(),
-        Sawe::Configuration::build_date().c_str(), Sawe::Configuration::build_time().c_str(),
-        Sawe::Configuration::revision().c_str());
     TaskInfo("number of CPU cores: %d", Sawe::Configuration::cpuCores());
     {
         TaskInfo ti("OpenGL information");
@@ -152,14 +164,6 @@ void Application::
         TaskInfo("shading language: %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
         TaskInfo("extensions/capabilities/caps: %s", glGetString(GL_EXTENSIONS));
     }
-
-    boost::gregorian::date today = boost::gregorian::day_clock::local_day();
-    boost::gregorian::date_facet* facet(new boost::gregorian::date_facet("%A %B %d, %Y"));
-    ti.tt().getStream().imbue(std::locale(std::cout.getloc(), facet));
-    ti.tt().getStream() << "Program started " << today;
-    TaskInfo ti2("%u command line argument%s", argc, argc==1?"":"s");
-    for (int i=0; i<argc; ++i)
-        TaskInfo("%s", argv[i]);
 }
 
 
@@ -167,7 +171,7 @@ Application* Application::
         global_ptr() 
 {
     Application* app = dynamic_cast<Application*>(QApplication::instance());
-    BOOST_ASSERT( app );
+    EXCEPTION_ASSERT( app );
     return app;
 }
 
@@ -277,7 +281,7 @@ bool Application::
     {
         _fatal_error = err;
         show_fatal_exception( err );
-        this->exit(-2);
+        this->exit(2);
     }
 
     return v;
@@ -306,6 +310,17 @@ void Application::
     p->setModified( false );
 }
 
+bool Application::
+        has_other_projects_than(Project*p)
+{
+    for (set<pProject>::iterator i = _projects.begin(); i!=_projects.end(); ++i)
+    {
+        if (&**i != p)
+            return true;
+    }
+    return false;
+}
+
 void Application::
         clearCaches()
 {
@@ -317,13 +332,6 @@ void Application::
              total/1024.f/1024, free/1024.f/1024);
 #endif
     emit clearCachesSignal();
-#ifdef USE_CUDA
-    GpuCpuDataCollection::moveAllDataToCpuMemory();
-#endif
-
-    TaskInfo("Reset CWT");
-    Tfr::Cwt::Singleton().resetSingleton();
-
 
     if ( !QGLContext::currentContext() ) // See RenderView::~RenderView()
         return;
@@ -373,7 +381,7 @@ pProject Application::
 }
 
 pProject Application::
-        slotOpen_file( string project_file_or_audio_file )
+         slotOpen_file( string project_file_or_audio_file )
 {
     pProject p = Project::open( project_file_or_audio_file );
     if (p)

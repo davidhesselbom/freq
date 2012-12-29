@@ -36,7 +36,7 @@ class SinkSource: public Sink
 {
 public:
     /// @see SinkSource
-    SinkSource();
+    SinkSource( int num_channels );
     SinkSource( const SinkSource& b);
     SinkSource& operator=( const SinkSource& b);
 
@@ -54,7 +54,7 @@ public:
     }
 
     virtual Intervals invalid_samples() { return _invalid_samples; }
-    virtual void invalidate_samples(const Intervals& I) { _invalid_samples |= I; }
+    virtual void invalidate_samples(const Intervals& I);
     void invalidate_and_forget_samples(const Intervals& I);
     void validate_samples( const Intervals& I ) { _invalid_samples -= I; }
 
@@ -82,6 +82,7 @@ public:
         'samplesDesc().spannedInterval().count'.
       */
     virtual IntervalType number_of_samples();
+    virtual unsigned num_channels() { return _num_channels; }
 
 
     /**
@@ -96,7 +97,7 @@ public:
     bool empty();
 
     /// Get what samples that are described in the containing buffer
-    Intervals samplesDesc();
+    Intervals samplesDesc() { return _valid_samples; }
 
 private:
 #ifndef SAWE_NO_SINKSOURCE_MUTEX
@@ -104,15 +105,13 @@ private:
 #endif
     std::vector<pBuffer> _cache;
 
-    bool _need_self_merge;
-
     /**
       Samples in 'b' will only be accepted if they are present in 'expected'.
       */
     void putExpectedSamples( pBuffer b, const Intervals& expected );
 
     /**
-      _invalid_samples describes which samples that should be put into this
+      _expected_samples describes which samples that should be put into this
       SinkSource. It is initialized to an empty interval and can be used through
       invalidate_samples() to say that certain samples are missing before
       calling putExpectedSamples.
@@ -121,11 +120,29 @@ private:
       */
     Intervals _invalid_samples;
 
+    /**
+     * @brief _valid_samples explains the samples that can be fetched from
+     * this instance. Trying to read anything outside of this will yield an
+     * empty buffer with zeroes.
+     */
+    Intervals _valid_samples;
+
+    int _num_channels;
+
     virtual pOperation source() const { return pOperation(); }
     virtual void source(pOperation)   { throw std::logic_error("Invalid call"); }
 
-    void selfmerge( Signal::Intervals forget = Signal::Intervals() );
+    void allocateCache( Signal::Interval, float fs );
+    //void selfmerge( Signal::Intervals forget = Signal::Intervals() );
     void merge( pBuffer );
+
+    /**
+     * @brief findBuffer finds the buffer containing 'sample'.
+     * Assumes that the _cache_mutex is locked already.
+     * @return The buffer containing 'sample' or the next following buffer if
+     * no buffer contains 'sample'. Might be _cache.end()
+     */
+    std::vector<pBuffer>::iterator findBuffer( Signal::IntervalType sample );
 };
 
 typedef boost::shared_ptr<Sink> pSink;

@@ -9,6 +9,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/foreach.hpp>
 #include <H5Fpublic.h>
+#include <H5Opublic.h>
 
 #include "hdf5_hl.h"
 
@@ -85,14 +86,31 @@ void Hdf5Input::
 {
     std::vector<std::string> strs;
     boost::split(strs, name, boost::is_any_of("/"));
-    BOOST_ASSERT( !strs.empty() );
+    EXCEPTION_ASSERT( !strs.empty() );
 
-    if (strs.front().empty())
-        strs.erase( strs.begin() );
-    BOOST_ASSERT( !strs.empty() );
+    std::string group;
+    for (size_t i=0; i<strs.size (); ++i)
+    {
+        group += strs[i];
+        if (!group.empty ())
+        {
+            herr_t status = H5Lexists (_file_id, group.c_str (), 0);
+            if (1!=status) throw Hdf5Error(Hdf5Error::Type_MissingDataset, "Hdf5 file does not contain a link named '" + group + "'", strs[0]);
 
-    herr_t status = H5LTfind_dataset ( _file_id, strs[0].c_str() );
-    if (1!=status) throw Hdf5Error(Hdf5Error::Type_MissingDataset, "Hdf5 file does not contain a dataset named '" + strs[0] + "'", strs[0]);
+            // Check that this is a group or nor a group
+            H5O_info_t info;
+            status = H5Oget_info_by_name(_file_id, group.c_str (), &info, 0);
+            if (0 > status) throw Hdf5Error(Hdf5Error::Type_MissingDataset, "Hdf5 file does not contain a valid link named '" + group + "'", strs[0]);
+            if (i+1 < strs.size ()) {
+                if (info.type != H5O_TYPE_GROUP) throw Hdf5Error(Hdf5Error::Type_MissingDataset, "Hdf5 file does not contain a group named '" + group + "'", strs[0]);
+            } else {
+                if (info.type == H5O_TYPE_GROUP) throw Hdf5Error(Hdf5Error::Type_MissingDataset, "Hdf5 file does not contain a dataset named '" + group + "'", strs[0]);
+            }
+        }
+        group += "/";
+    }
+
+    EXCEPTION_ASSERT( group.size () > 1 );
 }
 
 
@@ -123,10 +141,10 @@ void Hdf5Output::
 {
     VERBOSE_HDF5 TaskTimer tt("Adding buffer '%s'", name.c_str());
 
-    float* p = cb.waveform_data()->getCpuMemory();
+    float* p = cb.mergeChannelData ()->getCpuMemory();
 
     const unsigned RANK=2;
-    hsize_t     dims[RANK]={cb.channels(), cb.number_of_samples()};
+    hsize_t     dims[RANK]={hsize_t(cb.number_of_channels ()), hsize_t(cb.number_of_samples())};
 
     herr_t      status = H5LTmake_dataset(_file_id,name.c_str(),RANK,dims,H5T_NATIVE_FLOAT,p);
     if (0>status) throw Hdf5Error(Hdf5Error::Type_HdfFailure, "Could not create and write a H5T_NATIVE_FLOAT type dataset named '" + name + "'", name);
@@ -168,16 +186,18 @@ Signal::pBuffer Hdf5Input::
     Signal::pBuffer buffer;
     if (dims[0]>0 && dims[1]>0 && dims[2]>0)
     {
-        buffer.reset( new Signal::Buffer(0, dims[2], 44100, dims[1], dims[0] ) );
-        float* p = buffer->waveform_data()->getCpuMemory();
+        EXCEPTION_ASSERT( dims[0] == 1 );
+        Signal::pTimeSeriesData data( new Signal::TimeSeriesData(dims[2], dims[1]) );
+        float* p = data->getCpuMemory();
 
         status = H5LTread_dataset(_file_id, name.c_str(), H5T_NATIVE_FLOAT, p);
         if (0>status) throw Hdf5Error(Hdf5Error::Type_MissingDataset, "Could not read a H5T_NATIVE_FLOAT type dataset named '" + name + "'", name);
 
+        buffer.reset( new Signal::Buffer(0, data, 44100 ) );
         VERBOSE_HDF5 TaskInfo("number_of_samples=%u, channels=%u, numberOfSignals=%u",
-                              buffer->waveform_data()->size().width,
-                              buffer->waveform_data()->size().height,
-                              buffer->waveform_data()->size().depth
+                              data->size ().width,
+                              data->size ().height,
+                              data->size ().depth
                               );
     }
 
@@ -192,10 +212,10 @@ void Hdf5Output::
     VERBOSE_HDF5 TaskTimer tt("Adding chunk '%s'", name.c_str());
 
     std::complex<float>* p = chunk.transform_data->getCpuMemory();
-    DataStorageSize s = chunk.transform_data->getNumberOfElements();
+    DataStorageSize s = chunk.transform_data->size();
 
     const unsigned RANK=2;
-    hsize_t     dims[RANK]={s.height,s.width};
+    hsize_t     dims[RANK]={hsize_t(s.height),hsize_t(s.width)};
 
     herr_t      status;
 
@@ -311,7 +331,7 @@ double Hdf5Input::
     vector<hsize_t> dims = getInfo(name, &class_id);
 
     BOOST_FOREACH( const hsize_t& t, dims)
-            BOOST_ASSERT( t == 1 );
+            EXCEPTION_ASSERT( t == 1 );
 
     double v;
     herr_t status = H5LTread_dataset(_file_id,name.c_str(),H5T_NATIVE_DOUBLE,&v);
@@ -393,7 +413,7 @@ Hdf5Buffer::Hdf5Buffer( std::string filename)
     :   _filename(filename) {}
 
 
-void Hdf5Chunk::
+bool Hdf5Chunk::
         operator()( Tfr::Chunk& c )
 {
     Tfr::Chunk* chunk;
@@ -409,6 +429,8 @@ void Hdf5Chunk::
         chunk = &c;
 
     Hdf5Chunk::saveChunk(_filename, *chunk);
+
+    return false;
 }
 
 
@@ -427,8 +449,8 @@ void Hdf5Buffer::
     Hdf5Output h5(filename);
 
     h5.add<Signal::Buffer>( dsetBuffer, cb );
-    h5.add<double>( dsetOffset, cb.sample_offset.asFloat());
-    h5.add<double>( dsetSamplerate, cb.sample_rate );
+    h5.add<double>( dsetOffset, cb.sample_offset().asFloat());
+    h5.add<double>( dsetSamplerate, cb.sample_rate() );
     h5.add<double>( dsetOverlap, overlap );
 }
 
@@ -451,8 +473,8 @@ Signal::pBuffer Hdf5Buffer::
     Signal::pBuffer b = h5.read<Signal::pBuffer>( dsetBuffer );
     if (b)
     {
-        b->sample_offset = h5.read<double>( dsetOffset );
-        b->sample_rate = h5.read<double>( dsetSamplerate );
+        b->set_sample_offset ( h5.read<double>( dsetOffset ) );
+        b->set_sample_rate ( h5.read<double>( dsetSamplerate ) );
     }
     try {
     *plot = h5.read<Signal::pBuffer>( dsetPlot );

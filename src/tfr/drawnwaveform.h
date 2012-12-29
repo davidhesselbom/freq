@@ -4,36 +4,43 @@
 #include "transform.h"
 #include "chunk.h"
 
-// gpumisc
-#include "HasSingleton.h"
-
 namespace Tfr {
 
-//    TODO remove HasSingleton
-class DrawnWaveform : public Transform
+class DrawnWaveform : public Transform, public TransformParams
 {
 public:
     DrawnWaveform();
 
-    virtual pChunk operator()( Signal::pBuffer b );
+    virtual const TransformParams* transformParams() const { return this; }
 
-    virtual Signal::pBuffer inverse( pChunk chunk );
+    virtual pChunk operator()( Signal::pMonoBuffer b );
 
-    virtual float displayedTimeResolution( float FS, float hz );
+    virtual Signal::pMonoBuffer inverse( pChunk chunk );
 
-    virtual FreqAxis freqAxis( float FS );
 
-    virtual unsigned next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
+    virtual pTransform createTransform() const;
 
-    virtual unsigned prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
+    virtual float displayedTimeResolution( float FS, float hz ) const;
 
-    virtual std::string toString();
+    virtual FreqAxis freqAxis( float FS ) const;
+
+    virtual unsigned next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate ) const;
+
+    virtual unsigned prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate ) const;
+
+    virtual std::string toString() const;
+
+    virtual bool operator==(const TransformParams& b) const;
+
 
     float blob(float FS);
 
     float block_fs;
     unsigned signal_length;
     float maxValue;
+
+private:
+    void updateMaxValue(Signal::pMonoBuffer b);
 };
 
 

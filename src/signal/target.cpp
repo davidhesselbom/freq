@@ -11,51 +11,12 @@
 #include <boost/foreach.hpp>
 #include <boost/noncopyable.hpp>
 
-#define DEBUG_Target if(0)
+
 //#define DEBUG_Target
+#define DEBUG_Target if(0)
+
 
 namespace Signal {
-
-
-class ForAllChannelsOperation: public Operation, public boost::noncopyable
-{
-public:
-    ForAllChannelsOperation
-        (
-            Signal::pOperation o
-        )
-            :
-        Operation(o)
-    {
-    }
-
-
-    virtual pBuffer read( const Interval& I )
-    {
-        unsigned N = num_channels();
-        Signal::pBuffer r;
-        for (unsigned i=0; i<N; ++i)
-        {
-            set_channel( i );
-            r = Signal::Operation::read( I );
-        }
-
-        return r;
-    }
-
-
-    virtual void invalidate_samples(const Intervals& I)
-    {
-        unsigned N = num_channels();
-        if (0 < N)
-        {
-            if (get_channel() >= N)
-                set_channel(N - 1);
-        }
-
-        Operation::invalidate_samples( I );
-    }
-};
 
 
 class UpdateView: public Operation, public boost::noncopyable
@@ -165,7 +126,7 @@ Sawe::Project* Layers::
 }
 
 
-std::set<pChain> Layers::
+const std::set<pChain>& Layers::
         layers()
 {
     return layers_;
@@ -175,7 +136,7 @@ std::set<pChain> Layers::
 void Layers::
         addLayer(pChain p )
 {
-    BOOST_ASSERT( !isInSet(p) );
+    EXCEPTION_ASSERT( !isInSet(p) );
     layers_.insert( p );
 }
 
@@ -183,7 +144,7 @@ void Layers::
 void Layers::
         removeLayer(pChain p)
 {
-    BOOST_ASSERT( isInSet(p) );
+    EXCEPTION_ASSERT( isInSet(p) );
     layers_.erase( p );
 }
 
@@ -214,7 +175,6 @@ Target::
             name_( name ),
             post_sink_( new PostSink ),
             reroute_channels_( new RerouteChannels(pOperation()) ),
-            forall_channels_( new ForAllChannelsOperation(pOperation()) ),
             update_view_( new UpdateView( all_layers->project(), name )),
             cache_vars_( new CacheVars ),
             add_as_channels_(false),
@@ -223,11 +183,10 @@ Target::
 {
     TaskInfo("Target name %s", name_.c_str());
     // all_layers_ might not actually be needed, but, project() is for update_view
-    BOOST_ASSERT( all_layers_ );
+    EXCEPTION_ASSERT( all_layers_ );
 
     post_sink_->source( reroute_channels_ );
-    forall_channels_->source( post_sink_ );
-    update_view_->source( forall_channels_ );
+    update_view_->source( post_sink_ );
     cache_vars_->source(update_view_);
     read_ = cache_vars_;
 
@@ -251,12 +210,19 @@ Target::
 }
 
 
+Sawe::Project* Target::
+        project()
+{
+    return all_layers_->project();
+}
+
+
 void Target::
         addLayerHead(pChainHead p)
 {
-    BOOST_ASSERT( p );
-    BOOST_ASSERT( !isInSet(p->chain()) );
-    //BOOST_ASSERT( all_layers_->isInSet(p->chain()) );
+    EXCEPTION_ASSERT( p );
+    EXCEPTION_ASSERT( !isInSet(p->chain()) );
+    //EXCEPTION_ASSERT( all_layers_->isInSet(p->chain()) );
 
     Signal::Intervals was_zero = read_->zeroed_samples_recursive();
 
@@ -273,8 +239,8 @@ void Target::
 void Target::
         removeLayerHead(pChainHead p)
 {
-    BOOST_ASSERT( isInSet(p->chain()) );
-    //BOOST_ASSERT( all_layers_->isInSet(p->chain()) );
+    EXCEPTION_ASSERT( isInSet(p->chain()) );
+    //EXCEPTION_ASSERT( all_layers_->isInSet(p->chain()) );
 
     Signal::Intervals was_zero = read_->zeroed_samples_recursive();
 
@@ -411,6 +377,13 @@ unsigned Target::
         return minsize;
 
     return lpo2s(align_up(current_valid_samples_per_chunk, minsize)/minsize)*minsize;
+}
+
+
+pChainHead Target::
+        main_chain_head()
+{
+    return *layerHeads.begin();
 }
 
 

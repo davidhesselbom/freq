@@ -18,6 +18,12 @@
 #define M_PIf ((float)M_PI)
 
 #ifdef __CUDACC__
+#ifndef USE_CUDA
+#define USE_CUDA
+#endif
+#endif
+
+#ifdef USE_CUDA
 typedef float2 BlockElemType;
 #else
 typedef Tfr::ChunkElement BlockElemType;
@@ -28,7 +34,7 @@ class ConverterPhase
 public:
     RESAMPLE_CALL float operator()( BlockElemType v, DataPos const& /*dataPosition*/ ) const
     {
-#ifdef __CUDACC__
+#ifdef USE_CUDA
         return atan2(v.x, v.y);
 #else
         return atan2(v.imag(), v.real());
@@ -42,7 +48,11 @@ template<Heightmap::AmplitudeAxis Axis>
 class ConverterAmplitudeAxis
 {
 public:
-    ConverterAmplitudeAxis(float normalization_factor):normalization_factor(normalization_factor) {}
+    ConverterAmplitudeAxis(float normalization_factor)
+        :
+          normalization_factor(normalization_factor)
+    {}
+
     RESAMPLE_CALL float operator()( BlockElemType v, DataPos const& dataPosition ) const
     {
         return Heightmap::AmplitudeValue<Axis>()( normalization_factor*ConverterAmplitude()( v, dataPosition ) );
@@ -51,6 +61,32 @@ public:
 private:
     float normalization_factor;
 };
+
+
+
+template<>
+class ConverterAmplitudeAxis<Heightmap::AmplitudeAxis_Real>
+{
+public:
+    ConverterAmplitudeAxis(float normalization_factor)
+        :
+          normalization_factor(normalization_factor)
+    {}
+
+    RESAMPLE_CALL float operator()( BlockElemType v, DataPos const& /*dataPosition*/ ) const
+    {
+#ifdef USE_CUDA
+        float q = v.x;
+#else
+        float q = v.real ();
+#endif
+        return normalization_factor * q;
+    }
+
+private:
+    float normalization_factor;
+};
+
 
 
 template<typename DefaultConverter>
@@ -264,7 +300,7 @@ public:
             }
             else
             {
-                unsigned stopy = min(q.y+ystep, ymax);
+                int stopy = min(q.y+ystep, ymax);
 
                 for (DataPos getp(q.x, q.y); getp.y<stopy; ++getp.y)
                     v = max(v, get( getp, reader));
@@ -279,7 +315,7 @@ public:
         else
         {
             qx1 = floor(min(qx2, qx1));
-            unsigned stopx = qx1+xdiff;
+            int stopx = qx1+xdiff;
 
             if (ystep <= 1)
             {
@@ -296,7 +332,7 @@ public:
             else
             {
                 DataPos getp(0, 0);
-                unsigned stopy = min(q.y+ystep, ymax);
+                int stopy = min(q.y+ystep, ymax);
 
                 for (getp.y = q.y; getp.y<stopy; ++getp.y)
                 {
@@ -321,8 +357,8 @@ public:
     Tfr::FreqAxis outputAxis;
 
     float xstep;
-    unsigned ystep;
-    unsigned ymax;
+    int ystep;
+    int ymax;
 };
 
 
@@ -417,7 +453,7 @@ public:
 //    writePos.y = blockIdx.y * 1 + threadIdx.y;
 //    if (writePos.x<sz.x && writePos.y < sz.y)
 //    {
-//        unsigned o = writePos.x  +  writePos.y * sz.x;
+//        int o = writePos.x  +  writePos.y * sz.x;
 //        o = o % 32;
 //        output[o] = 0;
 //    }
@@ -441,7 +477,7 @@ void blockResampleChunkAxis( Tfr::ChunkData::Ptr inputp,
                  )
 {
     // translate type to be read as a cuda texture
-#ifdef __CUDACC__
+#ifdef USE_CUDA
     DataStorage<float2>::Ptr input =
             CudaGlobalStorage::BorrowPitchedPtr<float2>(
                     inputp->size(),
@@ -609,7 +645,7 @@ void resampleStftAxis( Tfr::ChunkData::Ptr inputp,
                    bool enable_subtexel_aggregation
                    )
 {
-#ifdef __CUDACC__
+#ifdef USE_CUDA
     cudaPitchedPtr cpp = CudaGlobalStorage::ReadOnly<2>( inputp ).getCudaPitchedPtr();
     cpp.xsize = cpp.pitch = nScales * sizeof(float2);
     cpp.ysize = nSamples;
@@ -737,7 +773,7 @@ private:
 
 extern "C"
 void blockClearPart( BlockData::Ptr block,
-                 unsigned start_t )
+                 int start_t )
 {
     element_operate(block, ResampleArea(0,0, block->size().width, 1), SetZero(start_t));
 }

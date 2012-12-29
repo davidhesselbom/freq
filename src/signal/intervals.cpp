@@ -1,13 +1,14 @@
 #include "intervals.h"
 
+#include "exceptionassert.h"
+#include "TaskTimer.h"
+
 #include <stdexcept>
-#include <boost/assert.hpp>
 #include <cfloat>
-#include <TaskTimer.h>
 #include <sstream>
 #include <limits.h>
 
-#include <QtGlobal> // foreach
+#include <boost/foreach.hpp>
 
 namespace Signal {
 
@@ -34,16 +35,15 @@ Interval::
     :
     first(first), last(last)
 {
-    BOOST_ASSERT( valid() );
+    if (!valid())
+        EXCEPTION_ASSERT( valid() );
 }
 
 
-Interval& Interval::
-        operator|=(const Interval& r)
+Interval Interval::
+        spanned(const Interval& r) const
 {
-    first = std::min(first, r.first);
-    last = std::max(last, r.last);
-    return *this;
+    return Interval(std::min(first, r.first), std::max(last, r.last));
 }
 
 
@@ -60,7 +60,7 @@ Interval& Interval::
 bool Interval::
         operator==(const Interval& r) const
 {
-    return first==r.first && last==r.last;
+    return valid() && r.valid() && ((first==r.first && last==r.last) || (r.count()==0 && count()==0));
 }
 
 
@@ -82,7 +82,6 @@ Intervals::
 {
     if (r.count())
     {
-        BOOST_ASSERT( r.valid() );
         base::push_back( r );
     }
 }
@@ -93,7 +92,7 @@ Intervals::
 {
     if (first != last)
     {
-        BOOST_ASSERT( first < last );
+        EXCEPTION_ASSERT( first < last );
         base::push_back( Interval( first, last ) );
     }
 }
@@ -102,7 +101,7 @@ Intervals::
 Intervals& Intervals::
         operator |= (const Intervals& b)
 {
-    foreach (const Interval& r,  b)
+    BOOST_FOREACH (const Interval& r, b)
         operator |= ( r );
     return *this;
 }
@@ -122,7 +121,7 @@ Intervals& Intervals::
             break;
         }
 
-    if (first==end())
+    if (first==base::end())
     {
         base::iterator itr = base::begin();
         // find first after
@@ -135,15 +134,14 @@ Intervals& Intervals::
     base::iterator last = first;
     last++;
     // find first after
-    while (last != end() && last->first <= r.last)
+    while (last != base::end() && last->first <= r.last)
         last++;
 
     Interval b = r;
 
     for (base::iterator itr=first; itr!=last; itr++)
     {
-        Interval& i = *itr;
-        b |= i;
+        b = b.spanned(*itr);
     }
 
     base::erase( first, last );
@@ -156,7 +154,7 @@ Intervals& Intervals::
 Intervals& Intervals::
         operator -= (const Intervals& b)
 {
-    foreach (const Interval& r,  b)
+    BOOST_FOREACH (const Interval& r,  b)
         operator-=( r );
     return *this;
 }
@@ -201,7 +199,7 @@ Intervals& Intervals::
 
             // Else, error
             } else {
-                BOOST_ASSERT( false );
+                EXCEPTION_ASSERT( false );
                 throw std::logic_error("Shouldn't reach here");
             }
         } else {
@@ -260,9 +258,9 @@ Intervals& Intervals::
     // TODO optimize
     Intervals rebuild;
 
-    foreach (const Interval& r,  b) {
+    BOOST_FOREACH (const Interval& r,  b) {
         Intervals copy = *this;
-        copy&=( r );
+        copy &= r;
         rebuild |= copy;
     }
 
@@ -403,7 +401,7 @@ Interval Intervals::
             return f;
         }
 
-        BOOST_ASSERT(center>=f.first);
+        EXCEPTION_ASSERT(center>=f.first);
 
         unsigned int_div_ceil = ( center-f.first + dt - 1 ) / dt;
         IntervalType start = f.first + dt*int_div_ceil;
@@ -412,7 +410,7 @@ Interval Intervals::
             return Interval( f.last-dt, f.last );
         }
 
-        BOOST_ASSERT(start>=f.first);
+        EXCEPTION_ASSERT(start>=f.first);
 
         return Interval( start, std::min(start+dt, f.last) );
     }
@@ -441,7 +439,7 @@ Intervals Intervals::
         enlarge( IntervalType dt ) const
 {
     Intervals I;
-    foreach (Interval r, *this)
+    BOOST_FOREACH (Interval r, *this)
     {
         if (r.first > Interval::IntervalType_MIN + dt)
             r.first -= dt;
@@ -463,7 +461,7 @@ Intervals Intervals::
         shrink( IntervalType dt ) const
 {
     Intervals I;
-    foreach (Interval r, *this)
+    BOOST_FOREACH (Interval r, *this)
     {
         if (r.first > Interval::IntervalType_MIN)
         {
@@ -490,7 +488,7 @@ IntervalType Intervals::
 {
     IntervalType c = 0;
 
-    foreach (const Interval& r, *this)
+    BOOST_FOREACH (const Interval& r, *this)
     {
         c += r.count();
     }
@@ -524,7 +522,7 @@ std::string Intervals::
     if (1<size())
         ss << size() << "#";
 
-    foreach (const Interval& r, *this)
+    BOOST_FOREACH (const Interval& r, *this)
     {
         if (1<size())
             ss << " ";
@@ -565,5 +563,6 @@ Intervals  operator |  (const Interval& a, const Intervals& b) { return Interval
 Intervals  operator -  (const Interval& a, const Intervals& b) { return Intervals(a)-=b; }
 Intervals  operator &  (const Interval& a, const Intervals& b) { return Intervals(a)&=b; }
 Intervals  operator ^  (const Interval& a, const Intervals& b) { return Intervals(a)^=b; }
+Intervals  operator |  (const Interval& a, const Interval& b)  { return a|Intervals(b); }
 
 } // namespace Signal

@@ -5,7 +5,7 @@
 
 # features directory
 qtfeatures = ../qtfeatures/
-win32:qtfeatures = ..\\\\qtfeatures\\\\
+win32:qtfeatures = "..\\qtfeatures\\"
 
 ####################
 # Project settings
@@ -33,15 +33,28 @@ testlib {
     win32:CONFIG += embed_manifest_exe
 }
 
+CONFIG(debug, debug|release): CONFIG += console
 
 CONFIG += $${qtfeatures}buildflags
 #CONFIG += console # console output
 # QMAKE_CXXFLAGS_DEBUG can't be changed in a .prf (feature) file
 QMAKE_CXXFLAGS_DEBUG += -D_DEBUG
 
-unix:QMAKE_CXXFLAGS_RELEASE += -fopenmp
-unix:QMAKE_LFLAGS_RELEASE += -fopenmp
-win32:QMAKE_CXXFLAGS_RELEASE += /openmp
+# Macports gcc 4.7 is necessary to build for OpenMP on Mac (to use OpenMP in anything but the main thread)
+macx: system(which /opt/local/bin/g++-mp-4.7 > /dev/null): CONFIG(release, debug|release) : CONFIG += useomp
+!macx: CONFIG(release, debug|release) : CONFIG += useomp
+llvm: CONFIG += noomp
+clang: CONFIG += noomp
+noomp: CONFIG -= useomp
+
+useomp {
+    DEFINES += USE_OMP
+    win32:QMAKE_CXXFLAGS += /openmp
+    unix:QMAKE_CXXFLAGS += -fopenmp
+    unix:QMAKE_LFLAGS += -fopenmp
+    macx:LIBS += -lgomp
+}
+
 
 ####################
 # Source code
@@ -55,15 +68,16 @@ SOURCES += \
     heightmap/*.cpp \
     sawe/*.cpp \
     signal/*.cpp \
+    test/*.cpp \
     tfr/fft4g.c \
     tfr/*.cpp \
     tools/*.cpp \
     tools/commands/*.cpp \
-    tools/support/*.cpp \
     tools/selections/*.cpp \
     tools/selections/support/*.cpp \
+    tools/support/*.cpp \
+    tools/widgets/*.cpp \
     ui/*.cpp \
-    tfr/fftinstance.cpp
 
 #Windows Icon
 win32:SOURCES += sonicawe.rc \
@@ -74,12 +88,14 @@ HEADERS += \
     heightmap/*.h \
     sawe/*.h \
     signal/*.h \
+    test/*.h \
     tfr/*.h \
     tools/*.h \
     tools/commands/*.h \
-    tools/support/*.h \
     tools/selections/*.h \
     tools/selections/support/*.h \
+    tools/support/*.h \
+    tools/widgets/*.h \
     ui/*.h \
 
 PRECOMPILED_HEADER += sawe/project_header.h
@@ -144,9 +160,6 @@ CONFIG += $${qtfeatures}otherfilesvs
 ####################
 # Build settings
 CONFIG += $${qtfeatures}sawelibs
-QT += opengl
-QT += network
-DEFINES += SAWE_NO_MUTEX
 #DEFINES += CUDA_MEMCHECK_TEST
 
 
@@ -167,15 +180,10 @@ CONFIG += $${qtfeatures}tmpdir
 # #######################################################################
 useopencl {
     SOURCES += \
-        #tfr/clfft/*.cpp
-        tfr/clamdfft/*.cpp
-    HEADERS += \
-        #tfr/clfft/*.h
-        tfr/clamdfft/*.h
+        tfr/clfft/*.cpp
 
-    use_amdfft:INCLUDEPATH += ../lib/sonicawe-winlib/clamdfft/include
-    use_amdfft:LIBS += -l../lib/sonicawe-winlib/clamdfft/lib32/import/clAmdFft.Runtime
-    use_amdfft:DEFINES += USE_AMDFFT
+    HEADERS += \
+        tfr/clfft/*.h
 
     CONFIG += $${qtfeatures}opencl
 }

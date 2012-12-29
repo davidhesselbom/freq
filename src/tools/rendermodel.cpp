@@ -27,11 +27,7 @@ RenderModel::
 {
     resetSettings();
 
-    p->worker.target( renderSignalTarget );
-
     Signal::PostSink* o = renderSignalTarget->post_sink();
-
-    BOOST_ASSERT( o->num_channels() );
 
     collections.resize(o->num_channels());
     for (unsigned c=0; c<o->num_channels(); ++c)
@@ -41,6 +37,9 @@ RenderModel::
 
     for (unsigned c=0; c<o->num_channels(); ++c)
         collections[c]->renderer = renderer.get();
+
+
+//    setTestCamera();
 }
 
 
@@ -83,6 +82,24 @@ void RenderModel::
 }
 
 
+void RenderModel::
+        setTestCamera()
+{
+    renderer->y_scale = 0.01f;
+    _qx = 63.4565;
+    _qy = 0;
+    _qz = 0.37;
+    _px = 0;
+    _py = 0;
+    _pz = -10;
+    _rx = 46.2;
+    _ry = 253.186;
+    _rz = 0;
+
+    orthoview.reset( _rx >= 90 );
+}
+
+
 Tfr::FreqAxis RenderModel::
         display_scale()
 {
@@ -116,7 +133,15 @@ void RenderModel::
 Tfr::Filter* RenderModel::
         block_filter()
 {
-    return dynamic_cast<Tfr::Filter*>(collections[0]->block_filter().get());
+    std::vector<Signal::pOperation> s = renderSignalTarget->post_sink ()->sinks ();
+    Tfr::Filter* f = dynamic_cast<Tfr::Filter*>(s[0]->source().get());
+
+#ifdef _DEBUG
+    Tfr::Filter* f2 = dynamic_cast<Tfr::Filter*>(collections[0]->block_filter().get());
+    EXCEPTION_ASSERT( f == f2 );
+#endif
+
+    return f;
 }
 
 

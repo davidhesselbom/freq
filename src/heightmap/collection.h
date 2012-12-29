@@ -91,7 +91,7 @@ The term scaleogram is not used in the source code, in favor of spectrogram.
 
 namespace Tfr {
     class Chunk;
-    class Transform;
+    class TransformParams;
 }
 
 namespace Heightmap {
@@ -115,12 +115,12 @@ public:
     /**
       Releases all GPU resources allocated by Heightmap::Collection.
       */
-    virtual void reset();
-    virtual bool empty();
+    void reset();
+    bool empty();
 
 
-    virtual Signal::Intervals invalid_samples() const;
-    virtual void invalidate_samples( const Signal::Intervals& );
+    Signal::Intervals invalid_samples();
+    void invalidate_samples( const Signal::Intervals& );
 
 
     /**
@@ -135,7 +135,7 @@ public:
 
     /**
       getBlock increases a counter for each block that hasn't been computed yet.
-      next_frame returns that counter. next_frame also calls applyUpdates().
+      next_frame returns that counter.
       */
     unsigned    next_frame();
 
@@ -161,6 +161,8 @@ public:
     /**
       Blocks are updated by CwtToBlock and StftToBlock by merging chunks into
       all existing blocks that intersect with the chunk interval.
+
+      This method is called by working threads.
       */
     std::vector<pBlock>      getIntersectingBlocks( const Signal::Intervals& I, bool only_visible );
 
@@ -175,7 +177,7 @@ public:
     /**
       Extract the transform from the current filter.
       */
-    boost::shared_ptr<Tfr::Transform> transform();
+    const Tfr::TransformParams* transform();
 
 
     unsigned long cacheByteSize();
@@ -250,48 +252,34 @@ private:
     typedef std::list<pBlock> recent_t;
 
 #ifndef SAWE_NO_MUTEX
-    QMutex _cache_mutex; // Mutex for _cache and _recent
+    QMutex _cache_mutex; /// Mutex for _cache and _recent, see getIntersectingBlocks
 #endif
     cache_t _cache;
-    recent_t _recent; // Ordered with the most recently accessed blocks first
+    recent_t _recent; /// Ordered with the most recently accessed blocks first
+    recent_t _to_remove;
 
-    // QMutex _updates_mutex;
-    // QWaitCondition _updates_condition;
     ThreadChecker _constructor_thread;
+
+
+    /**
+     * @brief findBlock searches through the cache for a block with reference 'ref'
+     * @param ref the block to search for.
+     * @return a block if it is found or pBlock() otherwise.
+     */
+    pBlock      findBlock( const Reference& ref );
+
 
     /**
       Attempts to allocate a new block.
       */
     pBlock      attempt( const Reference& ref );
 
+
     /**
       Creates a new block.
       */
     pBlock      createBlock( const Reference& ref );
 
-    /**
-      Compoute a short-time Fourier transform (stft). Usefull for filling new
-      blocks with data really fast.
-      */
-    void        fillBlock( pBlock block, const Signal::Intervals& to_update );
-
-
-    /**
-      Work of the _updates queue of chunks to merge.
-      */
-    // void        applyUpdates();
-
-
-    /**
-      TODO comment
-      */
-    void        mergeStftBlock( boost::shared_ptr<Tfr::Chunk> stft, pBlock block );
-
-
-    /**
-      Add block information from Cwt transform. Returns whether any information was merged.
-      */
-    bool        mergeBlock( Block* outBlock, Tfr::Chunk* inChunk, unsigned cuda_stream, bool save_in_prepared_data = false );
 
     /**
       Add block information from another block. Returns whether any information was merged.
@@ -300,9 +288,37 @@ private:
 
 
     /**
-      If 'r' exists in _cache, update its last_frame_used so that it wont yet be freed.
+      Update 'b':S last_frame_used so that it wont yet be freed.
       */
-    void        poke(const Reference& r);
+    void        poke( pBlock b );
+
+
+    /**
+     * Queue a block for removal.
+     */
+    void        removeBlock( pBlock b );
+
+
+    /**
+     * @brief getAllocatedBlock returns an allocated block either by new a
+     * memory allocation or by reusing the data from an old block.
+     */
+    pBlock      getAllocatedBlock( const Reference& ref );
+
+
+    /**
+     * @brief setDummyValues fills a block with dummy values, used for testing.
+     * @param block
+     */
+    void        setDummyValues( pBlock block );
+
+
+    /**
+     * @brief createBlockFromOthers fills a block with data from other blocks.
+     * @param block
+     */
+    void        createBlockFromOthers(pBlock block);
+
 
     /**
       Try to create 'r' and return its invalid samples if it was created.

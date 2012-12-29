@@ -21,7 +21,7 @@ RecordView::
             model_(model),
             prev_limit_(0)
 {
-    float l = model->project->worker.source()->length();
+    float l = model->project->worker.length();
     prev_limit_ = l;
 }
 
@@ -38,6 +38,14 @@ void RecordView::
 {
     if (enabled)
     {
+#ifndef SAWE_NO_MUTEX
+        if (!model_->project->worker.isRunning())
+        {
+            Ui::MainWindow* ui = model_->project->mainWindow()->getItems();
+            ui->actionRecord->setChecked(false);
+        }
+#endif
+
         float limit = model_->project->worker.length();
         limit -= 1/model_->render_view->model->xscale;
         if (limit<0) limit = 0;

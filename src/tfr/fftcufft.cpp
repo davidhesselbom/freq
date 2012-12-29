@@ -5,10 +5,9 @@
 #include <cufft.h>
 #include "cudaMemsetFix.cu.h"
 
-#include <CudaException.h>
-#include <CudaProperties.h>
+#include "CudaException.h"
+#include "CudaProperties.h"
 #include "cudaglobalstorage.h"
-#include "complexbuffer.h"
 #include "TaskTimer.h"
 #include "cuffthandlecontext.h"
 
@@ -25,8 +24,8 @@ void FftCufft::
     TIME_STFT TaskTimer tt("FFt cufft");
 
     cufftComplex* d = (cufftComplex*)CudaGlobalStorage::WriteAll<1>( output ).device_ptr();
-    BOOST_ASSERT( sizeof(cufftComplex) == sizeof(std::complex<float>));
-    BOOST_ASSERT( sizeof(cufftComplex) == sizeof(float2));
+    EXCEPTION_ASSERT( sizeof(cufftComplex) == sizeof(std::complex<float>));
+    EXCEPTION_ASSERT( sizeof(cufftComplex) == sizeof(float2));
     unsigned inN = input->sizeInBytes().width,
              outN = output->numberOfBytes();
     if (inN<outN)
@@ -57,7 +56,7 @@ void FftCufft::
     cufftReal* i = CudaGlobalStorage::ReadOnly<1>( input ).device_ptr();
     cufftComplex* o = (cufftComplex*)CudaGlobalStorage::WriteAll<1>( output ).device_ptr();
 
-    BOOST_ASSERT( input->size().width/2 + 1 == output->size().width);
+    EXCEPTION_ASSERT( input->size().width/2 + 1 == output->size().width);
 
     CufftException_SAFE_CALL(cufftExecR2C(
         CufftHandleContext(0, CUFFT_R2C)(input->size().width, 1),
@@ -71,7 +70,7 @@ void FftCufft::
     cufftComplex* i = (cufftComplex*)CudaGlobalStorage::ReadOnly<1>( input ).device_ptr();
     cufftReal* o = CudaGlobalStorage::WriteAll<1>( output ).device_ptr();
 
-    BOOST_ASSERT( output->size().width/2 + 1 == input->size().width);
+    EXCEPTION_ASSERT( output->size().width/2 + 1 == input->size().width);
 
     CufftException_SAFE_CALL(cufftExecC2R(
         CufftHandleContext(0, CUFFT_C2R)(output->size().width, 1),
@@ -85,7 +84,7 @@ void FftCufft::
 //    cufftComplex* i = (cufftComplex*)CudaGlobalStorage::ReadOnly<1>( input ).device_ptr();
 //    cufftComplex* o = (cufftComplex*)CudaGlobalStorage::WriteAll<1>( output ).device_ptr();
 
-//    BOOST_ASSERT( output->numberOfBytes() == input->numberOfBytes() );
+//    EXCEPTION_ASSERT( output->numberOfBytes() == input->numberOfBytes() );
 
 //    CufftException_SAFE_CALL(cufftExecC2C(
 //        CufftHandleContext(0, CUFFT_C2C)(n.width, n.height),
@@ -107,9 +106,7 @@ void FftCufft::
             slices = n.height,
             i = 0;
 
-    // check for available memory
-    size_t free=0, total=0;
-    cudaMemGetInfo(&free, &total);
+    size_t free = availableMemoryForSingleAllocation();
     free /= 2; // Don't even try to get close to use all memory
     // never use more than 64 MB
     if (free > 64<<20)
@@ -161,7 +158,7 @@ void FftCufft::
 
     if (!inputbuffer->HasValidContent<CudaGlobalStorage>())
     {
-        TIME_STFT TaskTimer tt("fetch input from Cpu to Gpu, %g MB", inputbuffer->getSizeInBytes1D()/1024.f/1024.f);
+        TIME_STFT TaskTimer tt("fetch input from Cpu to Gpu, %g MB", inputbuffer->numberOfBytes()/1024.f/1024.f);
         input = CudaGlobalStorage::ReadOnly<1>( inputbuffer ).device_ptr();
         TIME_STFT CudaException_ThreadSynchronize();
     }
@@ -203,7 +200,7 @@ void FftCufft::
 
     TIME_STFT TaskTimer tt2("Stft::operator compute");
 
-    BOOST_ASSERT( slices > 0 );
+    EXCEPTION_ASSERT( slices > 0 );
 
     CufftHandleContext
             _handle_ctx_r2c(0, CUFFT_R2C);
@@ -250,8 +247,7 @@ void FftCufft::
             i = 0;
 
     // check for available memory
-    size_t free=0, total=0;
-    cudaMemGetInfo(&free, &total);
+    size_t free = availableMemoryForSingleAllocation();
     free /= 2; // Don't even try to get close to use all memory
     // and never use more than 64 MB
     if (free > 64<<20)
@@ -360,13 +356,13 @@ unsigned FftCufft::
     //return lpo2s(x);
 
     multiple = std::max(1u, multiple);
-    BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
+    EXCEPTION_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
 
     unsigned bases[]={2, 3, 5, 7};
     unsigned a[]={0, 0, 0, 0};
     unsigned N_bases = 4; // could limit to 2 bases
     unsigned x2 = multiple*findLargestSmaller(bases, a, 0, int_div_ceil(x, multiple), 0, N_bases);
-    BOOST_ASSERT( x2 < x );
+    EXCEPTION_ASSERT( x2 < x );
     return x2;
 }
 
@@ -378,13 +374,13 @@ unsigned FftCufft::
     //return spo2g(x);
 
     multiple = std::max(1u, multiple);
-    BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
+    EXCEPTION_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
 
     unsigned bases[]={2, 3, 5, 7};
     unsigned a[]={0, 0, 0, 0};
     unsigned N_bases = 4;
     unsigned x2 = multiple*findSmallestGreater(bases, a, 0, x/multiple, 0, N_bases);
-    BOOST_ASSERT( x2 > x );
+    EXCEPTION_ASSERT( x2 > x );
     return x2;
 }
 

@@ -29,10 +29,9 @@ namespace Tools { namespace Selections
             selection_button_( Qt::LeftButton ),
             selection_controller_( selection_controller )
     {
-        setupGui();
-
-        setAttribute( Qt::WA_DontShowOnScreen, true );
         setEnabled( false );
+
+        setupGui();
     }
 
 
@@ -81,6 +80,8 @@ namespace Tools { namespace Selections
         one_action_at_a_time_->addActionItem( ui->actionRectangleSelection );
         one_action_at_a_time_->addActionItem( ui->actionTimeSelection );
         one_action_at_a_time_->addActionItem( ui->actionFrequencySelection );
+
+        ui->actionRectangleSelection->trigger();
     }
 
 
@@ -89,6 +90,7 @@ namespace Tools { namespace Selections
     {
         if (e->button() == selection_button_)
         {
+            view_->visible = true;
             Tools::RenderView &r = *selection_controller_->render_view();
 
             bool success;
@@ -104,9 +106,10 @@ namespace Tools { namespace Selections
 
             model()->validate();
             rectangleForm_->updateGui();
+            selection_controller_->render_view()->userinput_update();
         }
-
-        selection_controller_->render_view()->userinput_update();
+        else
+            e->ignore();
     }
 
 
@@ -153,12 +156,11 @@ namespace Tools { namespace Selections
     void RectangleController::
             changeEvent ( QEvent * event )
     {
-        if (event->type() & QEvent::ParentChange)
+        if (event->type() == QEvent::ParentChange)
         {
-            view_->visible = 0!=parent();
         }
 
-        if (event->type() & QEvent::EnabledChange)
+        if (event->type() == QEvent::EnabledChange)
         {
             view_->enabled = isEnabled();
 
@@ -213,10 +215,16 @@ namespace Tools { namespace Selections
         {
             bool currentTool = model()->tryFilter( o );
             rectangleForm_->showAsCurrentTool( currentTool );
+            if (currentTool)
+            {
+                view_->visible = model()->a != model()->b;
+            }
 
             if (model()->replaceFilter( o ))
                 selection_controller_->model()->set_current_selection( model()->updateFilter() );
         }
+        else
+            view_->visible = false;
     }
 
 }} // namespace Tools::Selections

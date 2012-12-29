@@ -1,152 +1,128 @@
 #include "buffer.h"
 
 #include <string.h> //memcpy
-#include "cpumemorystorage.h"
 
+#include "TaskTimer.h"
+#include "cpumemorystorage.h"
 #ifdef USE_CUDA
 #include "cudaglobalstorage.h"
 #endif
 
+
+//#define TIME_BUFFER
+#define TIME_BUFFER if(0)
+
+//#define TIME_BUFFER_LINE(x) TIME(x)
+#define TIME_BUFFER_LINE(x) x
+
+
 namespace Signal {
 
 
-Buffer::Buffer(UnsignedF first_sample, IntervalType numberOfSamples, float fs, unsigned numberOfChannels, unsigned numberOfSignals)
-:   sample_offset(first_sample),
-    sample_rate(fs),
-    bitor_channel_(0)
+MonoBuffer::
+        MonoBuffer(Interval I, float fs)
+:   sample_offset_(I.first),
+    sample_rate_(fs)
 {
-    BOOST_ASSERT( 0 < numberOfSamples );
-    BOOST_ASSERT( 0 < numberOfChannels );
-    BOOST_ASSERT( 0 < fs );
-    waveform_data_.reset( new DataStorage<float>(DataStorageSize( numberOfSamples, numberOfChannels, numberOfSignals )));
+    EXCEPTION_ASSERT( 0 < I.count ());
+    EXCEPTION_ASSERT( 0 < sample_rate() );
+
+    time_series_.reset( new TimeSeriesData(DataStorageSize( I.count ())));
 }
 
 
-Buffer::Buffer(Signal::Interval subinterval, pBuffer other, unsigned channel )
-:   sample_offset(subinterval.first),
-    sample_rate(other->sample_rate),
-    other_(other)
+MonoBuffer::
+        MonoBuffer(UnsignedF first_sample, IntervalType numberOfSamples, float fs)
+:   sample_offset_(first_sample),
+    sample_rate_(fs)
 {
-    while (other->other_ && other.get() != this)
-        other = other->other_;
+    EXCEPTION_ASSERT( 0 < numberOfSamples );
+    EXCEPTION_ASSERT( 0 < sample_rate() );
 
-    BOOST_ASSERT( 0 < sample_rate );
-    BOOST_ASSERT( (subinterval & other->getInterval()) == subinterval );
-    BOOST_ASSERT( other.get() != this );
-    BOOST_ASSERT( channel < other->channels() );
-
-/*    DataStorage<float, 3>& data = *other_->waveform_data();
-
-    IntervalType offs = channel*other_->number_of_samples() + subinterval.first - other->getInterval().first;
-
-    if(0) switch (data.getMemoryLocation())
-    {
-    case GpuCpuVoidData::CpuMemory:
-        waveform_data_ = new GpuCpuData<float>(
-                data.getCpuMemory() + offs,
-                make_uint3( subinterval.count(), 1, 1), GpuCpuVoidData::CpuMemory, true );
-        return;
-
-    case GpuCpuVoidData::CudaGlobal:
-        {
-            cudaPitchedPtrType<float> cppt = data.getCudaGlobal();
-            cudaPitchedPtr cpp = cppt.getCudaPitchedPtr();
-            cpp.ptr = ((float*)cpp.ptr) + offs;
-            cpp.xsize = sizeof(float) * subinterval.count();
-            cpp.ysize = 1;
-            cpp.pitch = cpp.xsize;
-            cppt = cudaPitchedPtrType<float>( cpp );
-
-            waveform_data_ = new GpuCpuData<float>(
-                    &cpp,
-                    cppt.getNumberOfElements(),
-                    GpuCpuVoidData::CudaGlobal, true );
-        }
-        return;
-
-    default:
-        break;
-    }*/
-
-    waveform_data_ .reset( new DataStorage<float>(subinterval.count()));
-    bitor_channel_ = channel;
-    *this |= *other_;
-    other_.reset(); // TODO other_ was used before but isn't anymore
+    time_series_.reset( new TimeSeriesData(DataStorageSize( numberOfSamples )));
 }
 
 
-Buffer::
-        ~Buffer()
+MonoBuffer::
+        MonoBuffer(UnsignedF first_sample, pTimeSeriesData p, float fs )
+:   sample_offset_(first_sample),
+    sample_rate_(fs)
+{
+    EXCEPTION_ASSERT( 0 < sample_rate() );
+    EXCEPTION_ASSERT( 1 == p->size ().height);
+    EXCEPTION_ASSERT( 1 == p->size ().depth);
+
+    time_series_.reset( new TimeSeriesData(p->size ()));
+
+    time_series_ = p;
+}
+
+
+MonoBuffer::
+        ~MonoBuffer()
 {
 }
 
 
-DataStorage<float>::Ptr Buffer::
-        waveform_data() const
-{
-    return waveform_data_;
-}
-
-
-void Buffer::
+void MonoBuffer::
         release_extra_resources()
 {
-    waveform_data_->OnlyKeepOneStorage<CpuMemoryStorage>();
+    time_series_->OnlyKeepOneStorage<CpuMemoryStorage>();
 }
 
 
-float Buffer::
+float MonoBuffer::
         start() const
 {
-    return (sample_offset/sample_rate).asFloat();
+    return (sample_offset_/sample_rate_).asFloat();
 }
 
 
-float Buffer::
+float MonoBuffer::
         length() const
 {
-    return number_of_samples()/sample_rate;
+    return number_of_samples()/sample_rate_;
 }
 
 
-Interval Buffer::
+Interval MonoBuffer::
         getInterval() const
 {
-    return Interval(sample_offset.asInteger(), (sample_offset + number_of_samples()).asInteger());
+    return Interval(sample_offset_.asInteger(), (sample_offset_ + number_of_samples()).asInteger());
 }
 
 
-unsigned Buffer::
-        channels() const
-{
-    return waveform_data()->size().height;
-}
-
-
-Buffer& Buffer::
-        operator|=(const Buffer& b)
+MonoBuffer& MonoBuffer::
+        operator|=(const MonoBuffer& b)
 {
     Interval i = getInterval() & b.getInterval();
 
     if (0 == i.count())
         return *this;
 
-    unsigned offs_write = i.first - sample_offset.asInteger();
-    unsigned offs_read = i.first - b.sample_offset.asInteger();
+    unsigned offs_write = i.first - sample_offset().asInteger();
+    unsigned offs_read = i.first - b.sample_offset().asInteger();
 
-    if (bitor_channel_)
-    {
-        offs_read += bitor_channel_*b.number_of_samples();
-        bitor_channel_ = 0;
-    }
+    TIME_BUFFER TaskTimer tt("%s %s = %s & %s",
+                  __FUNCTION__ ,
+                  i.toString().c_str(), getInterval().toString().c_str(), b.getInterval().toString().c_str() );
 
-    DataStorage<float>::Ptr write, read;
+    bool toCpu = time_series_->HasValidContent<CpuMemoryStorage>();
+    bool fromCpu = b.time_series_->HasValidContent<CpuMemoryStorage>();
+    bool toGpu = false;
+    bool fromGpu = false;
 
 #ifdef USE_CUDA
-    bool toGpu = 0 != waveform_data_->FindStorage<CudaGlobalStorage>();
-    bool toCpu = 0 != waveform_data_->FindStorage<CpuMemoryStorage>();
-    bool fromCpu = 0 != b.waveform_data_->FindStorage<CpuMemoryStorage>();
-    bool fromGpu = 0 != b.waveform_data_->FindStorage<CudaGlobalStorage>();
+    toGpu = time_series_->HasValidContent<CudaGlobalStorage>();
+    fromGpu = b.time_series_->HasValidContent<CudaGlobalStorage>();
+
+    // if no data is allocated in *this, take the gpu if 'b' has gpu storage
+    if (!toCpu && !toGpu)
+        toGpu = fromGpu;
+
+    if (!fromCpu && !fromGpu)
+        fromGpu = toGpu;
+#endif
 
     if (!toCpu && !toGpu && !fromCpu && !fromGpu)
     {
@@ -154,96 +130,80 @@ Buffer& Buffer::
         return *this;
     }
 
-    // if no data is allocated in *this, take the gpu if 'b' has gpu storage
-    if (!toCpu && !toGpu)
+    pTimeSeriesData write, read;
+
+    if (i == getInterval())
     {
-        toGpu = fromGpu;
-        if (i.count() == getInterval().count())
-        {
-            if (fromGpu)
-                write = CudaGlobalStorage::BorrowPitchedPtr<float>(
-                    DataStorageSize(i.count()),
-                    make_cudaPitchedPtr(
-                                    CudaGlobalStorage::WriteAll<1>( waveform_data_ ).device_ptr() + offs_write,
-                                    i.count()*sizeof(float),
-                                    i.count()*sizeof(float), 1), false);
-            else
-                write = CpuMemoryStorage::BorrowPtr(
-                    DataStorageSize(i.count()),
-                    CpuMemoryStorage::WriteAll<1>( waveform_data_ ).ptr() + offs_write, false);
-        }
+        write = time_series_;
+#ifdef USE_CUDA
+        if (toGpu)
+            CudaGlobalStorage::WriteAll<1>(write);
         else
-        {
-            if (fromGpu)
-                write = CudaGlobalStorage::BorrowPitchedPtr<float>(
-                    DataStorageSize(i.count()),
-                    make_cudaPitchedPtr(
-                                    CudaGlobalStorage::ReadWrite<1>( waveform_data_ ).device_ptr() + offs_write,
-                                    i.count()*sizeof(float),
-                                    i.count()*sizeof(float), 1), false);
-            else
-                write = CpuMemoryStorage::BorrowPtr(
-                    DataStorageSize(i.count()),
-                    CpuMemoryStorage::ReadWrite<1>( waveform_data_ ).ptr() + offs_write, false);
-        }
+#endif
+            CpuMemoryStorage::WriteAll<1>(write);
     }
-
-    if (!fromCpu && !fromGpu)
-        fromGpu = toGpu;
-
-    if (toGpu || fromGpu)
+    if (i == b.getInterval())
     {
-        if (toGpu && !write)
-            write = CudaGlobalStorage::BorrowPitchedPtr<float>(
-                DataStorageSize(i.count()),
-                make_cudaPitchedPtr(
-                                CudaGlobalStorage::ReadWrite<1>( waveform_data_ ).device_ptr() + offs_write,
-                                i.count()*sizeof(float),
-                                i.count()*sizeof(float), 1), false);
-
-
+        read = b.waveform_data();
+#ifdef USE_CUDA
         if (fromGpu)
-            read = CudaGlobalStorage::BorrowPitchedPtr<float>(
-                DataStorageSize(i.count()),
-                make_cudaPitchedPtr(
-                        CudaGlobalStorage::ReadOnly<1>( b.waveform_data_ ).device_ptr() + offs_read,
-                        i.count()*sizeof(float),
-                        i.count()*sizeof(float), 1), false);
+            CudaGlobalStorage::ReadOnly<1>(read);
+        else
+#endif
+            CpuMemoryStorage::ReadOnly<1>(read);
     }
+
+#ifdef USE_CUDA
+    if (toGpu && !write)
+        write = CudaGlobalStorage::BorrowPitchedPtr<float>(
+            DataStorageSize(i.count()),
+            make_cudaPitchedPtr(
+                            CudaGlobalStorage::ReadWrite<1>( time_series_ ).device_ptr() + offs_write,
+                            i.count()*sizeof(float),
+                            i.count()*sizeof(float), 1), false);
+
+
+    if (fromGpu && !read)
+        read = CudaGlobalStorage::BorrowPitchedPtr<float>(
+            DataStorageSize(i.count()),
+            make_cudaPitchedPtr(
+                    CudaGlobalStorage::ReadOnly<1>( b.time_series_ ).device_ptr() + offs_read,
+                    i.count()*sizeof(float),
+                    i.count()*sizeof(float), 1), false);
 #endif
 
     if (!write)
         write = CpuMemoryStorage::BorrowPtr(
             DataStorageSize(i.count()),
-            CpuMemoryStorage::ReadWrite<1>( waveform_data_ ).ptr() + offs_write, false);
+            CpuMemoryStorage::ReadWrite<1>( time_series_ ).ptr() + offs_write, false);
 
     if (!read)
         read = CpuMemoryStorage::BorrowPtr(
             DataStorageSize(i.count()),
-            CpuMemoryStorage::ReadOnly<1>( b.waveform_data_ ).ptr() + offs_read, false);
+            CpuMemoryStorage::ReadOnly<1>( b.time_series_ ).ptr() + offs_read, false);
 
     // Let DataStorage manage all memcpying
-    *write = *read;
+    TIME_BUFFER_LINE( *write = *read );
 
     return *this;
 }
 
 
 
-Buffer& Buffer::
-        operator+=(const Buffer& b)
+MonoBuffer& MonoBuffer::
+        operator+=(const MonoBuffer& b)
 {
     Interval i = getInterval() & b.getInterval();
 
     if (0 == i.count())
         return *this;
 
-    unsigned offs_write = i.first - sample_offset.asInteger();
-    unsigned offs_read = i.first - b.sample_offset.asInteger();
+    unsigned offs_write = i.first - sample_offset().asInteger();
+    unsigned offs_read = i.first - b.sample_offset().asInteger();
     unsigned length = i.count();
 
-    float* write = waveform_data_->getCpuMemory();
-    float const* read = b.waveform_data_->getCpuMemory();
+    float* write = time_series_->getCpuMemory();
+    float const* read = b.time_series_->getCpuMemory();
 
     write += offs_write;
     read += offs_read;
@@ -254,5 +214,177 @@ Buffer& Buffer::
     return *this;
 }
 
+
+bool MonoBuffer::
+        operator==(MonoBuffer const& b) const
+{
+    if (b.waveform_data ()->size () != waveform_data ()->size ())
+        return false;
+    float *p = waveform_data ()->getCpuMemory ();
+    float *bp = b.waveform_data ()->getCpuMemory ();
+    return 0 == memcmp(p, bp, waveform_data ()->numberOfBytes ());
+}
+
+
+Buffer::
+        Buffer(Interval I,
+       float sample_rate,
+       unsigned number_of_channels)
+{
+    EXCEPTION_ASSERT( 0 < sample_rate );
+    EXCEPTION_ASSERT( 0 < number_of_channels );
+
+    channels_.resize(number_of_channels);
+    for (unsigned i=0; i<number_of_channels; ++i)
+        channels_[i].reset(new MonoBuffer(I, sample_rate));
+}
+
+
+Buffer::
+        Buffer(UnsignedF first_sample,
+       IntervalType number_of_samples,
+       float sample_rate,
+       unsigned number_of_channels)
+{
+    EXCEPTION_ASSERT( 0 < sample_rate );
+    EXCEPTION_ASSERT( 0 < number_of_channels );
+
+    channels_.resize(number_of_channels);
+    for (unsigned i=0; i<number_of_channels; ++i)
+        channels_[i].reset(new MonoBuffer(first_sample, number_of_samples, sample_rate));
+}
+
+
+Buffer::
+        Buffer(pMonoBuffer b)
+{
+    channels_.resize (1);
+    channels_[0] = b;
+}
+
+
+Buffer::
+        Buffer(UnsignedF first_sample, pTimeSeriesData ptr, float sample_rate)
+{
+    DataStorageSize sz = ptr->size ();
+    EXCEPTION_ASSERT( 1 == sz.depth );
+    channels_.resize (sz.height);
+
+    float* p = ptr->getCpuMemory ();
+    for (unsigned i=0; i<number_of_channels (); ++i)
+    {
+        pTimeSeriesData qtr(new TimeSeriesData(sz.width));
+        float* q = qtr->getCpuMemory();
+        memcpy(q, p + i*sz.width, sz.width*sizeof(float));
+        channels_[i].reset(new MonoBuffer(first_sample, qtr, sample_rate));
+    }
+}
+
+
+Buffer::
+        ~Buffer()
+{}
+
+
+void Buffer::
+        release_extra_resources()
+{
+    for (unsigned i=0; i<number_of_channels(); ++i)
+        channels_[i]->release_extra_resources();
+}
+
+
+void Buffer::
+        set_sample_rate(float fs)
+{
+    for (unsigned i=0; i<number_of_channels(); ++i)
+        channels_[i]->set_sample_rate(fs);
+}
+
+
+void Buffer::
+        set_sample_offset(UnsignedF offset)
+{
+    for (unsigned i=0; i<number_of_channels(); ++i)
+        channels_[i]->set_sample_offset(offset);
+}
+
+
+pTimeSeriesData Buffer::
+        mergeChannelData() const
+{
+    if (1 == number_of_channels())
+        return getChannel (0)->waveform_data ();
+
+    pTimeSeriesData r( new TimeSeriesData(number_of_samples(), number_of_channels()));
+    float* p = r->getCpuMemory ();
+    for (unsigned i=0; i<number_of_channels(); ++i)
+    {
+        float* q = getChannel(i)->waveform_data ()->getCpuMemory ();
+        memcpy(p + i*number_of_samples (), q, number_of_samples()*sizeof(float));
+    }
+    return r;
+}
+
+
+Buffer& Buffer::
+        operator|=(const Buffer& b)
+{
+    EXCEPTION_ASSERT( b.number_of_channels () == number_of_channels ());
+    for (unsigned i=0; i<number_of_channels(); ++i)
+        *channels_[i] |= *b.getChannel (i);
+    return *this;
+}
+
+
+Buffer& Buffer::
+        operator+=(const Buffer& b)
+{
+    EXCEPTION_ASSERT( b.number_of_channels () == number_of_channels ());
+    for (unsigned i=0; i<number_of_channels(); ++i)
+        *channels_[i] += *b.getChannel (i);
+    return *this;
+}
+
+
+bool Buffer::
+        operator==(const Buffer& b) const
+{
+    if (b.number_of_channels () != number_of_channels ())
+        return false;
+
+    for (unsigned i=0; i<number_of_channels(); ++i)
+        if (*channels_[i] != *b.getChannel (i))
+            return false;
+
+    return true;
+}
+
+
+void Buffer::
+        test()
+{
+    pBuffer b(new Buffer(Interval(20,30), 40, 7));
+    for (unsigned c=0; c<b->number_of_channels (); ++c)
+    {
+        float *p = b->getChannel (c)->waveform_data ()->getCpuMemory ();
+        for (int i=0; i<b->number_of_samples (); ++i)
+            p[i] = c + i/(float)b->number_of_samples ();
+    }
+    pBuffer c(new Buffer(Interval(20,30), 40, 7));
+    *c |= *b;
+
+    // Test that 'c' contains a copy on write of 'b'
+    float * bp = CpuMemoryStorage::ReadOnly<1>(b->getChannel (0)->waveform_data ()).ptr();
+    float * cp = CpuMemoryStorage::ReadOnly<1>(c->getChannel (0)->waveform_data ()).ptr();
+    float * bpcpu = b->getChannel (0)->waveform_data ()->getCpuMemory ();
+    float * cp2 = CpuMemoryStorage::ReadOnly<1>(c->getChannel (0)->waveform_data ()).ptr();
+    float * cpcpu = c->getChannel (0)->waveform_data ()->getCpuMemory ();
+    EXCEPTION_ASSERTX( bp != 0, "Buffer didn't allocate any data");
+    EXCEPTION_ASSERTX( bp == cp, "Buffer |= didn't do a copy on write");
+    EXCEPTION_ASSERTX( bpcpu == bp, "Buffer |= didn't do a copy on write");
+    EXCEPTION_ASSERTX( bpcpu != cp2, "Buffer |= didn't do a copy on write");
+    EXCEPTION_ASSERTX( cpcpu == cp2, "Buffer |= didn't do a copy on write");
+}
 
 } // namespace Signal

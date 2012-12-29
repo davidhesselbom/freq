@@ -1,11 +1,7 @@
-#ifdef _MSC_VER
-typedef __int64 __int64_t;
-#else
-#include <stdint.h> // defines __int64_t which is expected by sndfile.h
-#endif
-
 #include "audiofile.h"
 #include "Statistics.h" // to play around for debugging
+#include "signal/transpose.h"
+#include "neat_math.h" // defines __int64_t which is expected by sndfile.h
 
 #include <sndfile.hh> // for reading various formats
 #include <math.h>
@@ -17,6 +13,7 @@ typedef __int64 __int64_t;
 #include <boost/scoped_ptr.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/weak_ptr.hpp>
+#include <boost/format.hpp>
 
 #if LEKA_FFT
 #include <cufft.h>
@@ -29,7 +26,16 @@ typedef __int64 __int64_t;
 #include <QByteArray>
 #include <QTemporaryFile>
 
+
+//#define VERBOSE_AUDIOFILE
+#define VERBOSE_AUDIOFILE if(0)
+
+//#define TIME_AUDIOFILE_LINE(x) TIME(x)
+#define TIME_AUDIOFILE_LINE(x) x
+
+
 using namespace std;
+using namespace boost;
 
 namespace Adapters {
 
@@ -295,57 +301,67 @@ Signal::pBuffer Audiofile::
         readRaw( const Signal::Interval& J )
 
 {
-    if (!tryload())
-    {
-        TaskInfo("Loading '%s' failed (this=%p), requested %s",
-                     filename().c_str(), this, J.toString().c_str());
-
-        return zeros( J );
-    }
+    EXCEPTION_ASSERTX(tryload(), str(format("Loading '%s' failed (this=%p), requested %s") %
+                                        filename() % this % J.toString()));
 
     Signal::Interval I = J;
-    Signal::IntervalType maxReadLength = 1<<18;
-    if (I.count() > maxReadLength)
-        I.last = I.first + maxReadLength;
+    Signal::IntervalType fixedReadLength = 1<<20;
+
+    I.first = align_down(I.first,fixedReadLength);
+    I.last = I.first + fixedReadLength;
 
     if (I.last > number_of_samples())
         I.last = number_of_samples();
 
-    if (!I.valid())
+    if (I.first < 0)
     {
-        TaskInfo("Couldn't load %s from '%s', getInterval is %s (this=%p)",
-                     J.toString().c_str(), filename().c_str(), getInterval().toString().c_str(), this);
+        // Treat out of range samples as zeros.
+        I.last = 0;
+        return zeros( I );
+    }
+
+    if (0==I.count())
+    {
+        TaskInfo("Couldn't load %s from '%s', getInterval is %s (this=%p), number_of_samples()=%d",
+                 J.toString().c_str(), filename().c_str(), getInterval().toString().c_str(), this, (int)number_of_samples());
         return zeros( J );
     }
 
-    TaskTimer tt("Loading %s from '%s' (this=%p)",
-                 J.toString().c_str(), filename().c_str(), this);
+    boost::shared_ptr<TaskTimer> tt;
+    VERBOSE_AUDIOFILE tt.reset(new TaskTimer("Loading %s from '%s' (this=%p)",
+                 I.toString().c_str(), filename().c_str(), this));
 
     DataStorage<float> partialfile(DataStorageSize( num_channels(), I.count(), 1));
-    sndfile->seek(I.first, SEEK_SET);
-    sf_count_t readframes = sndfile->read(partialfile.getCpuMemory(), num_channels()*I.count()); // yes float
+    sf_count_t sndfilepos;
+    TIME_AUDIOFILE_LINE( sndfilepos = sndfile->seek(I.first, SEEK_SET) );
+    if (sndfilepos < 0)
+    {
+        TaskInfo("%s", str(format("ERROR! Couldn't set read position to %d. An error occured (%d)") % I.first % sndfilepos).c_str());
+        return zeros( J );
+    }
+    if (sndfilepos != I.first)
+    {
+        TaskInfo("%s", str(format("ERROR! Couldn't set read position to %d. sndfilepos was %d") % I.first % sndfilepos).c_str());
+        return zeros( J );
+    }
+
+    float* data = CpuMemoryStorage::WriteAll<float,3>( &partialfile ).ptr();
+    sf_count_t readframes;
+    TIME_AUDIOFILE_LINE( readframes = sndfile->read(data, num_channels()*I.count())); // read float
     if ((sf_count_t)I.count() > readframes)
         I.last = I.first + readframes;
 
-    float* data = partialfile.getCpuMemory();
-
     Signal::pBuffer waveform( new Signal::Buffer(I.first, I.count(), sample_rate(), num_channels()));
-    float* target = waveform->waveform_data()->getCpuMemory();
+    Signal::pTimeSeriesData mergedata = waveform->mergeChannelData ();
+    TIME_AUDIOFILE_LINE( Signal::transpose( mergedata.get(), &partialfile ) );
+    waveform.reset (new Signal::Buffer(I.first, mergedata, sample_rate()));
 
-    // Compute transpose of signal
-    unsigned C = waveform->channels();
-    for (unsigned i=0; i<I.count(); i++) {
-        for (unsigned c=0; c<C; c++) {
-            target[i + c*I.count()] = data[i*C + c];
-        }
-    }
+    VERBOSE_AUDIOFILE *tt << "Read " << I.toString() << ", total signal length " << lengthLongFormat();
 
-    tt << "Read " << I.toString() << ", total signal length " << lengthLongFormat();
+    VERBOSE_AUDIOFILE tt->flushStream();
 
-    tt.flushStream();
-
-    tt.info("Data size: %lu samples, %lu channels", (size_t)sndfile->frames(), (size_t)sndfile->channels() );
-    tt.info("Sample rate: %lu samples/second", sndfile->samplerate() );
+    VERBOSE_AUDIOFILE tt->info("Data size: %lu samples, %lu channels", (size_t)sndfile->frames(), (size_t)sndfile->channels() );
+    VERBOSE_AUDIOFILE tt->info("Sample rate: %lu samples/second", sndfile->samplerate() );
 
     if ((invalid_samples() - I).empty())
     {

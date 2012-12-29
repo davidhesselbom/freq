@@ -364,7 +364,7 @@ void NavigationController::
 void NavigationController::
         changeEvent(QEvent * event)
 {
-    if (event->type() & QEvent::EnabledChange)
+    if (event->type() == QEvent::EnabledChange)
     {
         if (!isEnabled())
             emit enabledChanged(isEnabled());
@@ -385,6 +385,12 @@ void NavigationController::
     connect(ui->actionToggleNavigationToolBox, SIGNAL(toggled(bool)), ui->toolBarOperation, SLOT(setVisible(bool)));
     connect(ui->toolBarOperation, SIGNAL(visibleChanged(bool)), ui->actionToggleNavigationToolBox, SLOT(setChecked(bool)));
 
+    QList<QAction*> a = ui->toolBarOperation->actions();
+    QAction* first = 0;
+    //if (!a.empty()) first = a.first();
+    ui->toolBarOperation->insertAction(first, ui->actionActivateNavigation);
+    ui->toolBarOperation->insertAction(first, ui->actionZoom);
+    if (first) ui->toolBarOperation->insertSeparator(first);
 
     connect(ui->actionActivateNavigation, SIGNAL(toggled(bool)), this, SLOT(receiveToggleNavigation(bool)));
     connect(ui->actionZoom, SIGNAL(toggled(bool)), this, SLOT(receiveToggleZoom(bool)));

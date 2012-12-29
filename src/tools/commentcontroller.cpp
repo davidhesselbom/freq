@@ -17,11 +17,12 @@ namespace Tools
 
 CommentController::
         CommentController(RenderView* view)
-            :   view_(view)
+            :   view_(view),
+                comment_(0)
 {
-    setupGui();
-
     setEnabled( false );
+
+    setupGui();
 }
 
 
@@ -116,14 +117,9 @@ void CommentController::
 void CommentController::
         changeEvent ( QEvent * event )
 {
-    if (event->type() & QEvent::EnabledChange)
-    {
-        view_->graphicsview->setToolFocus( isEnabled() );
-
-        view_->toolSelector()->setCurrentTool( this, isEnabled() );
-
-        emit enabledChanged(isEnabled());
-    }
+    if (event->type() == QEvent::EnabledChange)
+        if (!isEnabled())
+            emit enabledChanged( isEnabled() );
 }
 
 
@@ -131,6 +127,7 @@ void CommentController::
         enableCommentAdder(bool active)
 {
     view_->toolSelector()->setCurrentTool( this, active );
+    view_->graphicsview->setToolFocus( active );
 
     if (active)
     {
@@ -150,7 +147,8 @@ void CommentController::
         if (comment_)
         {
             // didn't place new comment before tool was disabled
-            comment_->getProxy()->deleteLater();
+            QGraphicsProxyWidget* proxy = comment_->getProxy();
+            proxy->deleteLater();
             comment_ = 0;
             setVisible( false );
         }
@@ -170,7 +168,7 @@ void CommentController::
 void CommentController::
         mouseMoveEvent ( QMouseEvent * e )
 {
-    BOOST_ASSERT( comment_ );
+    EXCEPTION_ASSERT( comment_ );
 
     bool use_heightmap_value = true;
 
@@ -195,6 +193,8 @@ void CommentController::
 {
     if (comment_)
     {
+        mouseMoveEvent( e );
+
         comment_->model()->screen_pos[0] = UpdateModelPositionFromScreen;
 
         // keep in sync with CommentView::updatePosition()

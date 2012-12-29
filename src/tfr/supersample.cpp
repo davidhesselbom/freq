@@ -7,13 +7,13 @@
 
 namespace Tfr {
 
-Signal::pBuffer SuperSample::
-        supersample( Signal::pBuffer b, float requested_sample_rate )
+Signal::pMonoBuffer SuperSample::
+        supersample( Signal::pMonoBuffer b, float requested_sample_rate )
 {
-    if (b->sample_rate == requested_sample_rate)
+    if (b->sample_rate() == requested_sample_rate)
         return b;
 
-    float bsample_rate = b->sample_rate;
+    float bsample_rate = b->sample_rate();
     float fmultiple = log2f( requested_sample_rate/bsample_rate );
     int multiple = (int)fmultiple;
     if (fmultiple < 0 )
@@ -27,13 +27,13 @@ Signal::pBuffer SuperSample::
     bool redundant = ((Tfr::StftChunk*)chunk.get())->redundant();
 
     unsigned src_window_size = ((Tfr::StftChunk*)chunk.get())->window_size();
-    Tfr::pChunk biggerchunk( new Tfr::StftChunk( src_window_size << multiple, Stft::WindowType_Rectangular, src_window_size<<multiple, redundant ));
+    Tfr::pChunk biggerchunk( new Tfr::StftChunk( src_window_size << multiple, StftParams::WindowType_Rectangular, src_window_size<<multiple, redundant ));
     biggerchunk->freqAxis = chunk->freqAxis;
     biggerchunk->chunk_offset = chunk->chunk_offset;
     biggerchunk->first_valid_sample = chunk->first_valid_sample << multiple;
     biggerchunk->n_valid_samples = chunk->n_valid_samples;
 
-    DataStorageSize src_sz = chunk->transform_data->getNumberOfElements();
+    DataStorageSize src_sz = chunk->transform_data->size();
     DataStorageSize dest_sz(1);
     if (redundant)
         dest_sz.width = src_sz.width << multiple;
@@ -50,7 +50,7 @@ Signal::pBuffer SuperSample::
 
 
     float normalize = 1.f/src_window_size;
-    for (unsigned i=0; i<src_sz.width; ++i)
+    for (int i=0; i<src_sz.width; ++i)
     {
         (dest[i] = src[i])*=normalize;
     }
@@ -59,9 +59,9 @@ Signal::pBuffer SuperSample::
     memset( dest + src_sz.width, 0, (dest_sz.width - src_sz.width) * sizeof(ChunkElement) );
 
 
-    Signal::pBuffer r = Tfr::Fft().inverse( biggerchunk );
+    Signal::pMonoBuffer r = Tfr::Fft().inverse( biggerchunk );
 
-    BOOST_ASSERT( r->sample_rate == requested_sample_rate );
+    EXCEPTION_ASSERT( r->sample_rate() == requested_sample_rate );
 
     return r;
 }

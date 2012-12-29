@@ -1,13 +1,22 @@
 #include "source.h"
 
-#include <demangle.h>
-#include <TaskTimer.h>
+#include "demangle.h"
+#include "TaskTimer.h"
+#include "cpumemorystorage.h"
+#ifdef USE_CUDA
+#include "cudaglobalstorage.h"
+#endif
 
 #include <sstream>
 #include <iomanip>
 
-//#define TIME_READCHECKED
-#define TIME_READCHECKED if(0)
+
+//#define TIME_SOURCEBASE
+#define TIME_SOURCEBASE if(0)
+
+//#define TIME_SOURCEBASE_LINE(x) TIME(x)
+#define TIME_SOURCEBASE_LINE(x) x
+
 
 using namespace std;
 
@@ -17,21 +26,28 @@ namespace Signal {
 pBuffer SourceBase::
         readChecked( const Interval& I )
 {
-    BOOST_ASSERT( I.count() );
+    TIME_SOURCEBASE TaskTimer tt("%s::readChecked( %s )", vartype(*this).c_str(), I.toString().c_str());
+
+    EXCEPTION_ASSERT( I.count() );
 
     pBuffer r = read(I);
 
-    // Check if read returned any samples form the interval I
-    BOOST_ASSERT(r->sample_offset.asInteger() < I.last);
-    BOOST_ASSERT(r->sample_offset.asInteger() + r->number_of_samples() > I.first);
+    // Check if read returned the first sample in interval I
+    Interval i(I.first, I.first + 1);
+    if ((i & r->getInterval()) != i)
+    {
+        TaskTimer tt("%s::readChecked( %s ) got %s", vartype(*this).c_str(), I.toString().c_str(), r->getInterval ().toString ().c_str ());
+        EXCEPTION_ASSERT( (i & r->getInterval()) == i );
+    }
 
     return r;
 }
 
+
 pBuffer SourceBase::
         readFixedLength( const Interval& I )
 {
-    TIME_READCHECKED TaskTimer tt("%s.%s %s",
+    TIME_SOURCEBASE TaskTimer tt("%s.%s %s",
                   vartype(*this).c_str(), __FUNCTION__ ,
                   I.toString().c_str() );
 
@@ -40,23 +56,21 @@ pBuffer SourceBase::
     if (I == p->getInterval())
         return p;
 
-    // This row gives some performance gain (cpu->gpu copy only once and never back until inverse).
-    // But this also increases complexity to be handled properyl, that is not coded yet.
-    //p->waveform_data()->getCudaGlobal();
+    // Didn't get exact result, prepare new Buffer
+    pBuffer r( new Buffer(I, p->sample_rate(), p->number_of_channels ()) );
 
-    // Didn't get exact result, check if it spans all of I
-    if ( (p->getInterval() & I) == I )
+    for (unsigned c=0; c<r->number_of_channels (); ++c)
     {
-        pBuffer r( new Buffer( I, p ));
-        BOOST_ASSERT( r->getInterval() == I );
-        return r;
+    #ifndef USE_CUDA
+        // Allocate cpu memory and prevent calling an unnecessary clear by flagging the store as up-to-date
+        CpuMemoryStorage::WriteAll<3>( r->getChannel (c)->waveform_data() );
+    #else
+        if (p->getChannel (c)->waveform_data()->HasValidContent<CudaGlobalStorage>())
+            CudaGlobalStorage::WriteAll<3>( r->getChannel (c)->waveform_data() );
+        else
+            CpuMemoryStorage::WriteAll<3>( r->getChannel (c)->waveform_data() );
+    #endif
     }
-
-    // Doesn't span all of I, prepare new Buffer
-    pBuffer r( new Buffer(I.first, I.count(), p->sample_rate ) );
-
-//    if ( p->waveform_data()->getMemoryLocation() == GpuCpuVoidData::CudaGlobal )
-//        r->waveform_data()->getCudaGlobal();
 
     Intervals sid(I);
 
@@ -66,7 +80,7 @@ pBuffer SourceBase::
             p = readChecked( sid.fetchFirstInterval() );
 
         sid -= p->getInterval();
-        (*r) |= *p; // Fill buffer
+        TIME_SOURCEBASE_LINE((*r) |= *p); // Fill buffer
         p.reset();
     }
 
@@ -111,13 +125,13 @@ string SourceBase::
 pBuffer SourceBase::
         zeros( const Interval& I )
 {
-    BOOST_ASSERT( I.count() );
+    EXCEPTION_ASSERT( I.count() );
 
-    TIME_READCHECKED TaskTimer tt("%s.%s %s",
+    TIME_SOURCEBASE TaskTimer tt("%s.%s %s",
                   vartype(*this).c_str(), __FUNCTION__ ,
                   I.toString().c_str() );
 
-    pBuffer r( new Buffer(I.first, I.count(), sample_rate()) );
+    pBuffer r( new Buffer(I, sample_rate(), num_channels()) );
     // doesn't need to memset 0, will be set by the first initialization of a dataset
     //memset(r->waveform_data()->getCpuMemory(), 0, r->waveform_data()->getSizeInBytes1D());
     return r;

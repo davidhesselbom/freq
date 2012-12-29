@@ -2,12 +2,13 @@
 
 #include "sawe/reader.h"
 
-#ifndef _DEBUG
+#if defined(USE_OMP)
 #include <omp.h>
 #endif
 
 #include <sstream>
 #include <iostream>
+#include <algorithm>
 
 #include <QSysInfo>
 #include <QString>
@@ -38,14 +39,10 @@ Configuration::
             skip_update_check_( false ),
             use_saved_state_( true ),
             channel_( 0 ),
-            scales_per_octave_( 20 ),
+            scales_per_octave_( 27.f+2.f/3 ), // this gives an stft window size of 4096 samples (with default cwt settings) due to the combined slider in RenderController::receiveSetTimeFrequencyResolution
             wavelet_time_support_( 3 ),
             wavelet_scale_support_( 3 ),
-#ifdef USE_CUDA
             min_hz_( 60 ),
-#else
-            min_hz_( 80 ), // the CPU version is so much slower, so ease it up a bit as default
-#endif
             samples_per_chunk_hint_( 1 ),
             samples_per_block_( 1<<8 ),
             scales_per_block_( 1<<8 ),
@@ -53,8 +50,7 @@ Configuration::
             get_csv_( (unsigned)-1 ),
             get_chunk_count_( false ),
             selectionfile_( "selection.wav" ),
-            soundfile_( "" ),
-            multithread_( false )
+            soundfile_( "" )
 {
 #ifdef SONICAWE_VERSION
     version_ = TOSTR(SONICAWE_VERSION);
@@ -106,6 +102,8 @@ Configuration::
 #else
     mono_ = false;
 #endif
+
+    set_basic_features();
 }
 
 
@@ -209,10 +207,12 @@ string Configuration::
     case QSysInfo::WV_2003: return "Windows Server 2003 (or in the same family)";
     case QSysInfo::WV_VISTA: return "Windows Vista";
     case QSysInfo::WV_WINDOWS7: return "Windows 7";
+    case QSysInfo::WV_NT_based: return "Windows 8 (or otherwise NT-based)";
     default: return QString("unrecognized Windows version (%1)").arg(QSysInfo::WindowsVersion).toStdString();
     }
 #endif
 #ifdef Q_OS_MAC
+#define xMV_10_8 (QSysInfo::MV_10_7+1)
     switch(QSysInfo::MacintoshVersion)
     {
     case QSysInfo::MV_Unknown: return "unknown Mac version";
@@ -224,7 +224,8 @@ string Configuration::
     case QSysInfo::MV_10_4: return "Mac OS X 10.4 (Tiger)";
     case QSysInfo::MV_10_5: return "Mac OS X 10.5 (Leopard)";
     case QSysInfo::MV_10_6: return "Mac OS X 10.6 (Snow Leopard)";
-    case QSysInfo::MV_10_7: return "Mac OS X 10.7 (Lion)";
+    case QSysInfo::MV_10_7: return "OS X 10.7 (Lion)";
+    case xMV_10_8: return "OS X 10.8 (Mountain Lion)";
     default: return QString("unrecognized Mac OS X version (%1)").arg(QSysInfo::MacintoshVersion).toStdString();
     }
 #endif
@@ -289,10 +290,10 @@ std::string Configuration::
 int Configuration::
         cpuCores()
 {
-#ifdef _DEBUG
-    return 1;
-#else
+#if defined(USE_OMP)
     return omp_get_max_threads();
+#else
+    return 1;
 #endif
 }
 
@@ -344,6 +345,11 @@ static const char _sawe_usage_string[] =
     "    standard output and the program exits immediately after. Valid parameters \n"
     "    are:\n"
     "\n"
+    "Generic settings\n"
+    "    --mono=1            Makes Sonic AWE only process the first channel\n"
+    "    --use_saved_state=0 Disables restoring old user interface states\n"
+    "    --skip_update_check=1 Disables checking for new versions\n"
+    "\n"
     "Ways of extracting data from a Continious Gabor Wavelet Transform (CWT)\n"
     "    --get_csv=number    Saves the given chunk number into sawe.csv which \n"
     "                        then can be read by matlab or octave.\n"
@@ -375,11 +381,6 @@ static const char _sawe_usage_string[] =
     "    --samples_per_block The transform chunks are downsampled to blocks for\n"
     "                        rendering, this gives the number of samples per block.\n"
     "    --scales_per_block  Number of scales per block, se samples_per_block.\n"
-
-//    "    multithread        If set, starts a parallell worker thread. Good if heavy \n"
-//    "                       filters are being used as the GUI won't be locked during\n"
-//    "                       computation.\n"
-
     "\n"
     "Sonic AWE is a product developed by MuchDifferent\n";
 
@@ -448,6 +449,7 @@ int Configuration::
     handle_options(char ***argv, int *argc)
 {
     int handled = 0;
+    std::string skipfeature_;
 
     while (*argc > 0) {
         const char *cmd = (*argv)[0];
@@ -473,13 +475,30 @@ int Configuration::
         else if (readarg(&cmd, version));
         else if (readarg(&cmd, use_saved_state));
         else if (readarg(&cmd, skip_update_check));
-#ifndef QT_NO_THREAD
-        else if (readarg(&cmd, multithread));
-#endif
+        else if (readarg(&cmd, skipfeature))
+        {
+            vector<string>::iterator featureitr = find(features_.begin(), features_.end(), skipfeature_);
+            if (features_.end() != featureitr)
+                features_.erase( featureitr );
+            else
+            {
+                commandline_message_ << "Unknown features: " << skipfeature_ << endl;
+                bool first = true;
+                foreach(string f, features_)
+                {
+                    if (!first)
+                        commandline_message_ << ", " << f;
+                    first = false;
+                }
+                commandline_message_ << endl;
+            }
+        }
+
         // TODO use _selectionfile
+
         else {
             commandline_message_ << "Unknown option: " << cmd << endl
-                    << "See the logfile sonicawe.log for a list of valid command line options.";
+                    << "See the logfile sonicawe.log for a list of valid command line options." << endl;
             break;
         }
 
@@ -659,6 +678,28 @@ bool Configuration::
         use_saved_state()
 {
     return Singleton().use_saved_state_;
+}
+
+
+bool Configuration::
+        feature(const std::string& v)
+{
+    return Singleton().features_.end() != find(Singleton().features_.begin(), Singleton().features_.end(), v);
+}
+
+
+void Configuration::
+        set_basic_features()
+{
+    features_.push_back("worker_thread");
+    features_.push_back("overlay_navigation");
+    features_.push_back("compute_device_info_in_menu");
+}
+
+
+void Configuration::
+        set_default_features(const std::string& style)
+{
 }
 
 

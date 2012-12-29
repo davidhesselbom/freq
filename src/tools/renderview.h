@@ -8,6 +8,7 @@
 #include "commentview.h"
 #include "sawe/toolmainloop.h"
 #include "tools/commands/viewstate.h"
+#include "support/timer.h"
 
 // boost
 #include <boost/scoped_ptr.hpp>
@@ -101,6 +102,7 @@ namespace Tools
 
     signals:
         /**
+         * @brief destroying. Use 'Qt::DirectConnection'
           Emitted in the destructor, before the OpenGL context is destroyed.
           QObject::destroyed() is emitted shortly after, but after the OpenGL
           context is destroyed.
@@ -108,38 +110,57 @@ namespace Tools
         void destroying();
 
         /**
+         * @brief prePaint. Use 'Qt::DirectConnection'
           Emitted right before camera setup. A tool have the option to affect
           the renderview camera for this frame.
           */
         void prePaint();
 
         /**
+         * @brief painting. Use 'Qt::DirectConnection'
           Emitted during painting, but after the heightmap has been rendered.
           Tool specific stuff is rendered here.
           */
         void painting();
 
         /**
-          */
+         * @brief populateTodoList. Use 'Qt::DirectConnection'
+         */
         void populateTodoList();
 
         /**
-          */
+         * @brief postPaint. Use 'Qt::DirectConnection'
+         */
         void postPaint();
 
         /**
-          */
+         * @brief paintingForeground. Use 'Qt::DirectConnection'
+         */
         void paintingForeground();
 
         /**
-          */
+         * @brief finishedWorkSection. Use 'Qt::AutoConnection'
+         */
         void finishedWorkSection();
 
 
+        /**
+         * @brief postUpdate. Use 'Qt::DirectConnection'
+         */
         void postUpdate();
 
 
+        /**
+         * @brief transformChanged is emitted through emitTransformChanged.
+         * emitTransformChanged should be called whenever the state of the
+         * transform parameters have changed. This signal might be issued
+         * several times during a frame. Use 'Qt::QueuedConnection'.
+         */
         void transformChanged();
+
+        /**
+         * @brief axisChanged. Use 'Qt::QueuedConnection'
+         */
         void axisChanged();
 
     private slots:
@@ -181,8 +202,9 @@ namespace Tools
         /**
           Adjusting sleep between frames based on fps.
           */
-        boost::posix_time::ptime _last_frame;
+        Support::Timer _last_frame;
         float _target_fps;
+
 
         double modelview_matrix[16], projection_matrix[16];
         int viewport_matrix[4];

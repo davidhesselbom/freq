@@ -47,10 +47,9 @@ void Application::
         cerr    << message << endl    // Want output in console window, if any
                 << Sawe::Configuration::commandLineUsageString();
         QErrorMessage::qtHandler()->showMessage( QString::fromStdString( message ) );
-        ::exit(-1);
+        ::exit(1);
         //mb.setWindowModality( Qt::ApplicationModal );
         //mb.show();
-
         return;
     }
 
@@ -64,10 +63,11 @@ void Application::
         p = Sawe::Application::slotNew_recording( );
 
     if (!p)
-        ::exit(-1);
+        ::exit(3);
 
-    Tfr::Cwt& cwt = Tfr::Cwt::Singleton();
-    Signal::pOperation source = p->tools().render_model.renderSignalTarget->post_sink()->source();
+    Tools::RenderModel& render_model = p->tools().render_model;
+    Tfr::Cwt& cwt = *render_model.getParam<Tfr::Cwt>();
+    Signal::pOperation source = render_model.renderSignalTarget->post_sink()->source();
     unsigned samples_per_chunk_hint = Sawe::Configuration::samples_per_chunk_hint();
     unsigned total_samples_per_chunk = cwt.prev_good_size( 1<<samples_per_chunk_hint, source->sample_rate() );
 
@@ -77,7 +77,7 @@ void Application::
     if (get_csv != (unsigned)-1) {
         if (0==source->number_of_samples()) {
             Sawe::Application::display_fatal_exception(std::invalid_argument("Can't extract CSV without input file."));
-            ::exit(-1);
+            ::exit(4);
         }
 
         Adapters::Csv csv(QString("sonicawe-%1.csv").arg(get_csv).toStdString());
@@ -91,7 +91,7 @@ void Application::
     if (get_hdf != (unsigned)-1) {
         if (0==source->number_of_samples()) {
             Sawe::Application::display_fatal_exception(std::invalid_argument("Can't extract HDF without input file."));
-            ::exit(-1);
+            ::exit(5);
         }
 
         Adapters::Hdf5Chunk hdf5(QString("sonicawe-%1.h5").arg(get_hdf).toStdString());
@@ -128,15 +128,14 @@ void Application::
 void Application::
         apply_command_line_options( pProject p )
 {
-    Tfr::Cwt& cwt = Tfr::Cwt::Singleton();
+    Tfr::Cwt& cwt = *p->tools().render_model.getParam<Tfr::Cwt>();
     cwt.scales_per_octave( Sawe::Configuration::scales_per_octave() );
     cwt.set_wanted_min_hz( Sawe::Configuration::min_hz() );
     cwt.wavelet_time_support( Sawe::Configuration::wavelet_time_support() );
     cwt.wavelet_scale_support( Sawe::Configuration::wavelet_scale_support() );
-    //cwt.set_wanted_min_hz( _min_hz );
 
 #ifndef SAWE_NO_MUTEX
-    if (_multithread)
+    if (Sawe::Configuration::feature("worker_thread"))
         p->worker.start();
 #endif
 

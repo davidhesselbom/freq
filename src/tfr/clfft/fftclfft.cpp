@@ -7,7 +7,6 @@
 
 #include "cpumemorystorage.h"
 #include "openclmemorystorage.h"
-#include "tfr/complexbuffer.h"
 #include "TaskTimer.h"
 #include "computationkernel.h"
 #include "clfftkernelbuffer.h"
@@ -41,7 +40,7 @@ void FftClFft::
     unsigned N = output->getNumberOfElements().width;
 
     if (-1 != direction)
-        BOOST_ASSERT( n == N );
+        EXCEPTION_ASSERT( n == N );
 
     {
         TIME_STFT TaskTimer tt("Computing fft(N=%u, n=%u, direction=%d)", N, n, direction);
@@ -93,7 +92,7 @@ void FftClFft::
     unsigned denseWidth = output->size().width;
     unsigned redundantWidth = input->size().width;
 
-   BOOST_ASSERT( denseWidth == redundantWidth/2+1 );
+   EXCEPTION_ASSERT( denseWidth == redundantWidth/2+1 );
 
     // interleave input to complex data
    Tfr::ChunkData::Ptr complexinput( new Tfr::ChunkData( input->size()));
@@ -122,7 +121,7 @@ void FftClFft::
     unsigned denseWidth = input->size().width;
     unsigned redundantWidth = output->size().width;
 
-    BOOST_ASSERT( denseWidth == redundantWidth/2+1 );
+    EXCEPTION_ASSERT( denseWidth == redundantWidth/2+1 );
 
     Tfr::ChunkData::Ptr redundantInput( new Tfr::ChunkData( redundantWidth, input->size().height ));
 
@@ -152,7 +151,7 @@ void FftClFft::
                  input->size().height,
                  direction==FftDirection_Forward?"forward":"backward");
 
-    BOOST_ASSERT( output->numberOfBytes() == input->numberOfBytes() );
+    EXCEPTION_ASSERT( output->numberOfBytes() == input->numberOfBytes() );
 
     const int batchSize = n.height;
 
@@ -184,8 +183,8 @@ void FftClFft::
 {
     unsigned denseWidth = n.width/2+1;
 
-    BOOST_ASSERT( output->numberOfElements()/denseWidth == n.height );
-    BOOST_ASSERT( input->numberOfElements()/n.width == n.height );
+    EXCEPTION_ASSERT( output->numberOfElements()/denseWidth == n.height );
+    EXCEPTION_ASSERT( input->numberOfElements()/n.width == n.height );
 
     // interleave input to complex data
     Tfr::ChunkData::Ptr complexinput( new Tfr::ChunkData( input->size()));
@@ -218,9 +217,9 @@ void FftClFft::
     unsigned batchcount1 = output->numberOfElements()/redundantWidth,
              batchcount2 = input->numberOfElements()/denseWidth;
 
-    BOOST_ASSERT( batchcount1 == batchcount2 );
-    BOOST_ASSERT( (denseWidth-1)*2 == redundantWidth );
-    BOOST_ASSERT( redundantWidth*n.height == output->numberOfElements() );
+    EXCEPTION_ASSERT( batchcount1 == batchcount2 );
+    EXCEPTION_ASSERT( (denseWidth-1)*2 == redundantWidth );
+    EXCEPTION_ASSERT( redundantWidth*n.height == output->numberOfElements() );
 
     Tfr::ChunkData::Ptr redundantInput( new Tfr::ChunkData( n.height*redundantWidth ));
 

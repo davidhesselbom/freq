@@ -5,6 +5,7 @@
 
 #include <HasSingleton.h>
 #include <sstream>
+#include <vector>
 
 namespace Sawe
 {
@@ -94,6 +95,8 @@ public:
     static bool skip_update_check();
     static bool use_saved_state();
 
+    static bool feature(const std::string&);
+
     static void resetDefaultSettings();
 
 private:
@@ -112,7 +115,7 @@ private:
     std::string distcodename_;
 
     unsigned channel_;
-    unsigned scales_per_octave_;
+    float scales_per_octave_;
     float wavelet_time_support_;
     float wavelet_scale_support_;
     float min_hz_;
@@ -128,8 +131,12 @@ private:
 
     std::string title_string_;
     std::string version_string_;
+    std::vector<std::string> features_;
 
     int handle_options(char ***argv, int *argc);
+
+    void set_basic_features();
+    void set_default_features(const std::string&style="");
 };
 
 } // namespace Sawe

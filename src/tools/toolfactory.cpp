@@ -37,9 +37,13 @@
 #include "undoredo.h"
 #include "commands/commandhistory.h"
 #include "splashscreen.h"
+#include "widgets/widgetoverlaycontroller.h"
+#include "filtercontroller.h"
+#include "printscreencontroller.h"
 
 // Sonic AWE
 #include "sawe/project.h"
+#include "sawe/configuration.h"
 #include "ui/mainwindow.h"
 
 // gpumisc
@@ -70,7 +74,7 @@ ToolFactory::
 
     _selection_controller = new SelectionController(&selection_model, _render_view );
 
-    _navigation_controller = new NavigationController(_render_view);
+    //_navigation_controller = new NavigationController(_render_view);
 
     playback_model.selection = &selection_model;
     _playback_view.reset( new PlaybackView(&playback_model, _render_view) );
@@ -142,7 +146,7 @@ ToolFactory::
     // _objects.push_back( QPointer<QObject>( new ClickableImageView( _render_view )));
 
 #if !defined(USE_CUDA) && !defined(USE_OPENCL)
-    _objects.push_back( QPointer<QObject>( new DropNotifyForm( p->mainWindow()->centralWidget(), _render_view )));
+//    _objects.push_back( QPointer<QObject>( new DropNotifyForm( p->mainWindow()->centralWidget(), _render_view )));
 #endif
 
     _objects.push_back( QPointer<QObject>( new SendFeedback( p->mainWindow() )));
@@ -155,6 +159,12 @@ ToolFactory::
 
     _objects.push_back( QPointer<QObject>( new SplashScreen() ));
 
+    if (Sawe::Configuration::feature("overlay_navigation"))
+        _objects.push_back( QPointer<QObject>( new Widgets::WidgetOverlayController( _render_view ) ));
+
+    _objects.push_back( QPointer<QObject>( new FilterController( p )));
+
+    _objects.push_back( QPointer<QObject>( new PrintScreenController( p )));
 
     //
     // Insert new tools here, and delete things in the destructor in the
@@ -218,13 +228,13 @@ ToolFactory::
 
     delete _fantracker_controller;
 
-    BOOST_ASSERT( _timeline_controller );
+    EXCEPTION_ASSERT( _timeline_controller );
 	delete _timeline_controller;
 
-    BOOST_ASSERT( _timeline_view );
+    EXCEPTION_ASSERT( _timeline_view );
     delete _timeline_view;
 
-    BOOST_ASSERT( _render_view );
+    EXCEPTION_ASSERT( _render_view );
     delete _render_view;
 }
 
@@ -236,7 +246,7 @@ ToolFactory::
             selection_model( 0 ),
             playback_model( 0 )
 {
-    BOOST_ASSERT( false );
+    EXCEPTION_ASSERT( false );
 }
 
 

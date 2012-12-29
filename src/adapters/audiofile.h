@@ -232,20 +232,13 @@
 
 #include "signal/operationcache.h"
 #include "sawe/reader.h"
+#include "neat_math.h" // uint64_t
 
 // boost
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/version.hpp>
 #include <boost/mpl/eval_if.hpp>
 #include <boost/mpl/identity.hpp>
-
-// std
-#ifdef _MSC_VER
-typedef unsigned __int64 uint64_t;
-typedef unsigned __int32 uint32_t;
-#else
-#include <stdint.h>
-#endif
 
 // gpumisc
 #include "cpumemorystorage.h"
@@ -404,9 +397,10 @@ private:
         if (version >= 2)
             i.last = std::min(i.last, (Signal::IntervalType)(1<<20));
 
-        Signal::pBuffer b = readFixedLengthAllChannels( i );
-        unsigned char* p = (unsigned char*)CpuMemoryStorage::ReadOnly<1>(b->waveform_data()).ptr();
-        size_t N = b->waveform_data()->numberOfBytes();
+        Signal::pBuffer b = readFixedLength( i );
+        Signal::pTimeSeriesData data = b->mergeChannelData ();
+        unsigned char* p = (unsigned char*)CpuMemoryStorage::ReadOnly<1>(data).ptr();
+        size_t N = data->numberOfBytes ();
         for (size_t i=0; i<N; ++i)
         {
             X = *p*X + *p;

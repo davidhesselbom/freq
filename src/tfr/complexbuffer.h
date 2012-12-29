@@ -12,6 +12,9 @@ namespace Tfr
 class ComplexBuffer
 {
 public:
+    typedef boost::shared_ptr<ComplexBuffer> Ptr;
+
+
     ComplexBuffer(UnsignedF firstSample,
            unsigned long numberOfSamples,
            float FS,
@@ -20,7 +23,7 @@ public:
     /**
         Create a complex waveform out of a real waveform.
     */
-    ComplexBuffer(const Signal::Buffer& b);
+    ComplexBuffer(const Signal::MonoBuffer& b);
 
     ComplexBuffer(DataStorage<float>::Ptr inputbuffer);
 
@@ -39,7 +42,7 @@ public:
     /**
         Overloaded from buffer
     */
-    unsigned number_of_samples() const { return _complex_waveform_data->getNumberOfElements().width; }
+    int number_of_samples() const { return _complex_waveform_data->size().width; }
 
 
     UnsignedF       sample_offset;
@@ -48,22 +51,20 @@ public:
     /**
         Used to convert back to real data, will discard imaginary part.
     */
-    Signal::pBuffer get_real();
+    Signal::pMonoBuffer get_real();
 
 
     /**
         Access the complex waveform
     */
     DataStorage<std::complex<float> >::Ptr complex_waveform_data() const {
-//    GpuCpuData<float2>* complex_waveform_data() const {
         return _complex_waveform_data;
     }
 
 protected:
-    Signal::pBuffer _my_real;
+    Signal::pMonoBuffer _my_real;
 
     void setData(DataStorage<float>::Ptr inputbuffer);
-    //    boost::scoped_ptr<GpuCpuData<float2> > _complex_waveform_data;
     DataStorage<std::complex<float> >::Ptr _complex_waveform_data;
 };
 

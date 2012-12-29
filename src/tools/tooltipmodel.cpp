@@ -65,7 +65,7 @@ const Heightmap::Position& TooltipModel::
 void TooltipModel::
         showToolTip( Heightmap::Position p, bool adjustScaleToLocalPeak )
 {
-    BOOST_ASSERT( render_view_ );
+    EXCEPTION_ASSERT( render_view_ );
 
     switch(this->automarking)
     {
@@ -118,7 +118,7 @@ void TooltipModel::
     else
     {
         p = this->pos();
-        BOOST_ASSERT( this->markers );
+        EXCEPTION_ASSERT( this->markers );
     }
 
     float FS = render_view_->model->project()->worker.source()->sample_rate();
@@ -155,15 +155,15 @@ void TooltipModel::
 
     if (dynamic_cast<Tfr::CwtFilter*>( render_view_->model->block_filter()))
     {
-        Tfr::Cwt& c = Tfr::Cwt::Singleton();
-        std_t = c.morlet_sigma_samples( FS, f ) / FS;
-        std_f = c.morlet_sigma_f( f );
+        const Tfr::Cwt* c = render_view_->model->getParam<Tfr::Cwt>();
+        std_t = c->morlet_sigma_samples( FS, f ) / FS;
+        std_f = c->morlet_sigma_f( f );
     }
     else if (dynamic_cast<Tfr::StftFilter*>( render_view_->model->block_filter()))
     {
-        Tfr::Stft& f = Tfr::Stft::Singleton();
-        std_t = f.chunk_size() / FS / 2;
-        std_f = FS / f.chunk_size() / 2;
+        const Tfr::StftParams* f = render_view_->model->getParam<Tfr::StftParams>();
+        std_t = f->chunk_size() / FS / 2;
+        std_f = FS / f->chunk_size() / 2;
     }
 
     ss << setiosflags(ios::fixed);
@@ -213,7 +213,7 @@ void TooltipModel::
     bool first = 0 == this->comment;
 
     comments_->setComment( this->pos(), ss.str(), &this->comment );
-    BOOST_ASSERT(this->comment);
+    EXCEPTION_ASSERT(this->comment);
     if (first)
     {
         this->comment->thumbnail( true );
@@ -295,14 +295,17 @@ std::string TooltipModel::
 class TooltipModel::FetchDataTransform: public TooltipModel::FetchData
 {
 public:
-    FetchDataTransform( RenderModel* m, Tfr::Stft* stft, float t )
+    FetchDataTransform( RenderModel* m, const Tfr::StftParams* stft, float t )
     {
         Signal::pOperation o = m->renderSignalTarget->source();
         Signal::IntervalType i = std::max(0.f, t) * o->sample_rate();
         unsigned w = stft->chunk_size();
         i = i / w * w;
         Signal::Interval I( i, i+w );
-        Tfr::pChunk chunk = (*stft)( o->readFixedLength(I) );
+
+        // Only check the first channel
+        // TODO check other channels
+        Tfr::pChunk chunk = (*stft->createTransform())( o->readFixedLength(I)->getChannel (0));
 
         abslog.reset( new DataStorage<float>( chunk->transform_data->size() ));
 
@@ -319,14 +322,16 @@ public:
         fa = chunk->freqAxis;
     }
 
-    FetchDataTransform( RenderModel* m, Tfr::Cepstrum* cepstrum, float t )
+    FetchDataTransform( RenderModel* m, const Tfr::CepstrumParams* cepstrum, float t )
     {
         Signal::pOperation o = m->renderSignalTarget->source();
         Signal::IntervalType i = std::max(0.f, t) * o->sample_rate();
         unsigned w = cepstrum->chunk_size();
         i = i / w * w;
         Signal::Interval I( i, i+w );
-        Tfr::pChunk chunk = (*cepstrum)( o->readFixedLength(I) );
+        // Only check the first channel
+        // TODO check other channels
+        Tfr::pChunk chunk = (*cepstrum->createTransform())( o->readFixedLength(I)->getChannel (0));
 
         abslog.reset( new DataStorage<float>(chunk->transform_data->size()));
 
@@ -343,25 +348,26 @@ public:
         fa = chunk->freqAxis;
     }
 
-    FetchDataTransform( RenderModel* m, Tfr::Cwt* cwt, float t )
+    FetchDataTransform( RenderModel* m, const Tfr::Cwt* cwt, float t )
     {
-        BOOST_ASSERT( cwt == Tfr::Cwt::SingletonP().get() );
-
         Signal::pOperation o = m->renderSignalTarget->source();
         float fs = o->sample_rate();
 
         Tfr::DummyCwtFilter filter;
         filter.source(o);
+        filter.transform ( cwt->createTransform ());
         Signal::IntervalType sample = std::max(0.f, t) * fs;
-        const Signal::Interval I(sample, sample+1);
-        Tfr::ChunkAndInverse chunkAndInverse = filter.computeChunk( I );
+        const Signal::Interval I = filter.requiredInterval (Signal::Interval(sample, sample+1), filter.transform ());
+        // Only check the first channel
+        // TODO check other channels
+        Tfr::pChunk chunk = (*filter.transform ())(o->readFixedLength (I)->getChannel (0));
 
-        Tfr::CwtChunk* cwtchunk = dynamic_cast<Tfr::CwtChunk*>( chunkAndInverse.chunk.get() );
+        Tfr::CwtChunk* cwtchunk = dynamic_cast<Tfr::CwtChunk*>( chunk.get() );
         unsigned N = 0;
         for (unsigned i=0; i < cwtchunk->chunks.size(); ++i)
             N += cwtchunk->chunks[i]->nScales() - (i!=0);
 
-        BOOST_ASSERT( N == cwt->nScales( fs ) );
+        EXCEPTION_ASSERT( N == cwt->nScales( fs ) );
 
         abslog.reset( new DataStorage<float>(N));
 
@@ -398,9 +404,9 @@ public:
             }
         }
 
-        BOOST_ASSERT( k == cwt->nScales(fs) );
+        EXCEPTION_ASSERT( k == cwt->nScales(fs) );
 
-        fa = chunkAndInverse.chunk->freqAxis;
+        fa = chunk->freqAxis;
     }
 
     virtual float operator()( float /*t*/, float hz, bool* is_valid_value )
@@ -463,13 +469,13 @@ boost::shared_ptr<TooltipModel::FetchData> TooltipModel::FetchData::
         createFetchData( RenderView* view, float t )
 {
     boost::shared_ptr<FetchData> r;
-    Tfr::pTransform transform = view->model->collections[0]->transform();
-    if (Tfr::Stft* stft = dynamic_cast<Tfr::Stft*>(transform.get()))
-        r.reset( new FetchDataTransform( view->model, stft, t ) );
-    else if (Tfr::Cwt* cwt = dynamic_cast<Tfr::Cwt*>(transform.get()))
-        r.reset( new FetchDataTransform( view->model, cwt, t ) );
-    else if (Tfr::Cepstrum* cepstrum = dynamic_cast<Tfr::Cepstrum*>(transform.get()))
+    const Tfr::TransformParams* transform = view->model->collections[0]->transform();
+    if (const Tfr::CepstrumParams* cepstrum = dynamic_cast<const Tfr::CepstrumParams*>(transform))
         r.reset( new FetchDataTransform( view->model, cepstrum, t ) );
+    else if (const Tfr::StftParams* stft = dynamic_cast<const Tfr::StftParams*>(transform))
+        r.reset( new FetchDataTransform( view->model, stft, t ) );
+    else if (const Tfr::Cwt* cwt = dynamic_cast<const Tfr::Cwt*>(transform))
+        r.reset( new FetchDataTransform( view->model, cwt, t ) );
     else
     {
         return r;
@@ -517,7 +523,7 @@ unsigned TooltipModel::
     tt.info("%g Hz is harmonic number number %u, fundamental frequency is %g Hz. Did %u tests",
         F, max_i, F/max_i, n_tests);
     best_compliance = max_s;
-    BOOST_ASSERT( 0 < max_i );
+    EXCEPTION_ASSERT( 0 < max_i );
     return max_i;
 }
 
@@ -525,7 +531,7 @@ unsigned TooltipModel::
 float TooltipModel::
       computeMarkerMeasure(const Heightmap::Position& pos, unsigned i, FetchData* fetcher)
 {
-    BOOST_ASSERT( 0 < i );
+    EXCEPTION_ASSERT( 0 < i );
     boost::shared_ptr<FetchData> myfetcher;
     if (0==fetcher)
     {

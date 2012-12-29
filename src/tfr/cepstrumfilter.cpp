@@ -18,37 +18,50 @@ CepstrumFilter::
 :   Filter(source),
     exclude_end_block(false)
 {
-
-    if (t)
+    if (!t)
     {
-        BOOST_ASSERT( dynamic_cast<Cepstrum*>(t.get()));
-
-        _transform = t;
+        CepstrumParams p;
+        p.setWindow(StftParams::WindowType_Hann, 0.75f);
+        t = pTransform(new Cepstrum(p));
     }
+
+    Cepstrum* c = dynamic_cast<Cepstrum*>(t.get());
+    EXCEPTION_ASSERT( c );
+
+    transform( t );
 }
 
 
-ChunkAndInverse CepstrumFilter::
-        computeChunk( const Signal::Interval& I )
+Signal::Interval CepstrumFilter::
+        requiredInterval( const Signal::Interval& I, Tfr::pTransform t )
 {
-    TIME_CepstrumFilter TaskTimer tt("Cepstrum filter");
+    const CepstrumParams& p = ((Cepstrum*)t.get())->params();
+    long averaging = p.averaging();
+    long window_size = p.chunk_size();
+    long window_increment = p.increment();
+    long chunk_size  = window_size*averaging;
+    long increment   = window_increment*averaging;
 
-    unsigned chunk_size = dynamic_cast<Cepstrum*>(transform().get())->chunk_size();
-    // Add a margin to make sure that the STFT is computed for one block before
-    // and one block after the signal. This makes it possible to do proper
-    // interpolations so that there won't be any edges between blocks
+    // Add a margin to make sure that the STFT is computed for one window
+    // before and one window after 'chunk_interval'.
 
-    unsigned first_chunk = 0,
-             last_chunk = (I.last + 2.5*chunk_size)/chunk_size;
+    long first_chunk = 0;
+    long last_chunk = (I.last + chunk_size/2 + increment - 1)/increment;
 
-    if (I.first >= 1.5*chunk_size)
-        first_chunk = (I.first - 1.5*chunk_size)/chunk_size;
+    if (I.first >= chunk_size/2)
+        first_chunk = (I.first - chunk_size/2)/increment;
+    else
+    {
+        first_chunk = floor((I.first - chunk_size/2.f)/increment);
 
-    ChunkAndInverse ci;
+        if (last_chunk*increment < chunk_size + increment)
+            last_chunk = (chunk_size + increment)/increment;
+    }
 
-    Interval chunk_interval (
-                first_chunk*chunk_size,
-                last_chunk*chunk_size);
+    Interval chunk_interval(
+                first_chunk*increment,
+                last_chunk*increment);
+
     if (exclude_end_block)
     {
         if (chunk_interval.last>number_of_samples())
@@ -58,37 +71,22 @@ ChunkAndInverse CepstrumFilter::
                 chunk_interval.last = last_chunk*chunk_size;
         }
     }
-    ci.inverse = source()->readFixedLength( chunk_interval );
 
-    // Compute the cepstrum transform
-    ci.chunk = (*transform())( ci.inverse );
-
-    return ci;
-}
-
-
-pTransform CepstrumFilter::
-        transform() const
-{
-    return _transform ? _transform : Cepstrum::SingletonP();
+    return chunk_interval;
 }
 
 
 void CepstrumFilter::
-        transform( pTransform t )
+        invalidate_samples(const Signal::Intervals& I)
 {
-    if (0 == dynamic_cast<Cepstrum*>(t.get ()))
-        throw std::invalid_argument("'transform' must be an instance of Tfr::Cepstrum");
+    const CepstrumParams& p = ((Cepstrum*)transform().get())->params();
+    int window_size = p.chunk_size();
+    int increment   = p.increment();
 
-    if ( t == transform() && !_transform )
-        t.reset();
-
-    if (_transform == t )
-        return;
-
-    invalidate_samples( Signal::Interval(0, number_of_samples() ));
-
-    _transform = t;
+    // include_time_support
+    Signal::Intervals J = I.enlarge(window_size-increment);
+    Operation::invalidate_samples( J );
 }
+
 
 } // namespace Signal

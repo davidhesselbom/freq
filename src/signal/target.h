@@ -23,10 +23,10 @@ public:
 
     Sawe::Project* project();
 
-    std::set<pChain> layers();
+    const std::set<pChain>& layers();
 
-    virtual void addLayer(pChain);
-    virtual void removeLayer(pChain);
+    void addLayer(pChain);
+    void removeLayer(pChain);
 
     bool isInSet(pChain) const;
 
@@ -37,7 +37,7 @@ private:
     Sawe::Project* project_;
 
     friend class boost::serialization::access;
-    Layers() { BOOST_ASSERT(false); } // required for serialization to compile, is never called
+    Layers() { EXCEPTION_ASSERT(false); } // required for serialization to compile, is never called
     template<class Archive> void serialize(Archive& ar, const unsigned int /*version*/) {
         TaskInfo ti("Layers::serialize");
         ar & BOOST_SERIALIZATION_NVP( layers_);
@@ -69,6 +69,13 @@ class Target {
 public:
     Target(Layers* all_layers, std::string name, bool allow_cheat_resolution, bool autocreate_chainheads);
     ~Target();
+
+    /**
+     * @brief Returns the project that owns this Target.
+     * TODO Target should preferably be independent of project.
+     * @return
+     */
+    Sawe::Project* project();
 
     /**
       //It is an error to add a layer that is not in 'all_layers_'
@@ -134,13 +141,16 @@ public:
       */
     unsigned prev_good_size( unsigned current_valid_samples_per_chunk );
 
+    /**
+     */
+    pChainHead main_chain_head();
+
 private:
     void rebuildSource();
 
     std::string name_;
     Signal::pOperation post_sink_;
     Signal::pOperation reroute_channels_;
-    Signal::pOperation forall_channels_;
     Signal::pOperation update_view_;
     Signal::pOperation cache_vars_;
     Signal::pOperation read_;

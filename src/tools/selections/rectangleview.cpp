@@ -2,10 +2,9 @@
 #include "rectanglemodel.h"
 
 #include "signal/worker.h"
+#include "tools/support/toolglbrush.h"
 
-#include <gl.h>
 #include <TaskTimer.h>
-#include <glPushContext.h>
 
 namespace Tools { namespace Selections
 {
@@ -14,7 +13,7 @@ namespace Tools { namespace Selections
 RectangleView::RectangleView(RectangleModel* model, Signal::Worker* worker)
     :
     enabled(false),
-    visible(true),
+    visible(false),
     model_(model),
     worker_(worker)
 {
@@ -49,11 +48,7 @@ void RectangleView::
 
     float y = 1;
 
-    glPushAttribContext ac;
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(false);
-    glColor4f( 0, 0, 0, enabled ? .5 : 0.2);
+    Support::ToolGlBrush tgb(enabled);
 
     glBegin(GL_TRIANGLE_STRIP);
         glVertex3f( x1, 0, z1 );
@@ -76,14 +71,13 @@ void RectangleView::
         glVertex3f( x1, y, z2 );
     glEnd();
     glLineWidth(0.5f);
-    glDepthMask(true);
 }
 
 
 void RectangleView::
         drawSelectionRectangle2()
 {
-    float l = worker_->source()->length();
+    float l = worker_->length();
     glDepthMask(false);
     glColor4f( 0, 0, 0, enabled ? .5 : 0.2);
     float

@@ -14,13 +14,11 @@ void wtCompute(
         float fs,
         float /*minHz*/,
         float maxHz,
-        unsigned half_sizes,
+        int half_sizes,
         float scales_per_octave,
         float sigma_t0,
         float normalization_factor )
 {
-    TaskTimer tt("wtCompute");
-
     Tfr::ChunkElement* in_waveform_ft = CpuMemoryStorage::ReadOnly<1>( in_waveform_ftp ).ptr();
     Tfr::ChunkElement* out_wavelet_ft = CpuMemoryStorage::WriteAll<2>( out_wavelet_ftp ).ptr();
 
@@ -76,7 +74,7 @@ void wtCompute(
 
         // Find period for this thread
 
-        unsigned offset = (nScales-1-j)*nFrequencyBins;
+        int offset = (nScales-1-j)*nFrequencyBins;
         float aj = exp2f(log2_a * (j + first_scale) ) * wscale;
         for (int w_bin=0; w_bin<N; ++w_bin)
         {
@@ -102,7 +100,8 @@ void wtInverse( Tfr::ChunkData::Ptr in_waveletp, DataStorage<float>::Ptr out_inv
     Tfr::ChunkElement* in = CpuMemoryStorage::ReadOnly<2>(in_waveletp).ptr();
     float* out = CpuMemoryStorage::WriteAll<1>(out_inverse_waveform).ptr();
 
-    for (unsigned x=0; x<size.width; ++x)
+    int w = size.width;
+    for (int x=0; x<w; ++x)
     {
         inverse_elem(
                 x, in, out,
@@ -116,10 +115,11 @@ void wtClamp( Tfr::ChunkData::Ptr in_wtp, size_t sample_offset, Tfr::ChunkData::
     CpuMemoryReadOnly<Tfr::ChunkElement, 2> in_wt = CpuMemoryStorage::ReadOnly<2>( in_wtp );
     CpuMemoryWriteOnly<Tfr::ChunkElement, 2> out_clamped_wt = CpuMemoryStorage::WriteAll<2>( out_clamped_wtp );
 
-
-    for (unsigned y=0; y<out_clamped_wt.numberOfElements().height; ++y)
+    int h = out_clamped_wt.numberOfElements().height;
+    int w = out_clamped_wt.numberOfElements().width;
+    for (int y=0; y<h; ++y)
     {
-        for (unsigned x=0; x<out_clamped_wt.numberOfElements().width; ++x)
+        for (int x=0; x<w; ++x)
         {
             CpuMemoryReadOnly<Tfr::ChunkElement, 2>::Position readp( x + sample_offset, y);
             CpuMemoryWriteOnly<Tfr::ChunkElement, 2>::Position writep( x, y);

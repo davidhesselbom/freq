@@ -17,9 +17,9 @@ namespace Support {
     }
 
 
-    void FanTrackerFilter::operator()( Tfr::Chunk& c )
+    bool FanTrackerFilter::operator()( Tfr::Chunk& c )
     {
-        BOOST_ASSERT( this->track.size() == num_channels() );
+        EXCEPTION_ASSERT( this->track.size() == num_channels() );
 
         //find the peak, store time, freq and amp in the map called track.
 
@@ -59,23 +59,27 @@ namespace Support {
 
         unsigned pos = c.chunk_offset.asInteger() + i*window_size;
 
-        PointsT& track = this->track[ get_channel() ];
-
-        if (peak == (unsigned)-1)
+        for (unsigned i=0; i<c.nChannels ();++i)
         {
-            PointsT::iterator test = track.find(pos);
-            if (test != track.end())
+            PointsT& track = this->track[ i ];
+
+            if (peak == (unsigned)-1)
             {
-                if (test == track.begin() || test == --track.end())
+                PointsT::iterator test = track.find(pos);
+                if (test != track.end())
                 {
-                    track.erase(test);
+                    if (test == track.begin() || test == --track.end())
+                    {
+                        track.erase(test);
+                    }
                 }
             }
-        }
-        else
-            track[pos] = point;
+            else
+                track[pos] = point;
+            }
         }
 
+        return false;
     }
 
 

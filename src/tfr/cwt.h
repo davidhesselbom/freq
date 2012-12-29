@@ -3,13 +3,16 @@
 
 #include "transform.h"
 #include "signal/buffer.h"
+#include "fftimplementation.h"
+
+#include <map>
 
 namespace Tfr {
 
 class CwtChunk;
 class CwtChunkPart;
 
-class Cwt:public Transform
+class Cwt:public Transform, public TransformParams
 {
 public:
     /**
@@ -29,18 +32,18 @@ public:
     could be allocated beforehand and reserved for the Signal::pBuffer. Previous
     copies with the page-locked chunk is synchronized at beforehand.
     */
+    Cwt( float scales_per_octave=20, float wavelet_time_suppport=3 );
 
-    // TODO remove singletons
-    static Cwt& Singleton();
-    static pTransform SingletonP();
+    virtual pChunk operator()( Signal::pMonoBuffer );
+    virtual Signal::pMonoBuffer inverse( pChunk );
+    virtual const TransformParams* transformParams() const { return this; }
 
-    virtual pChunk operator()( Signal::pBuffer );
-    pChunk computeChunkPart( pChunk ft, unsigned first_scale, unsigned n_scales );
-
-    virtual Signal::pBuffer inverse( pChunk );
-    virtual FreqAxis freqAxis( float FS );
-    virtual float displayedTimeResolution( float FS, float hz );
+    virtual pTransform createTransform() const;
+    virtual float displayedTimeResolution( float FS, float hz ) const;
+    virtual FreqAxis freqAxis( float FS ) const;
     //virtual Signal::Interval validLength(Signal::pBuffer buffer);
+    virtual bool operator==(const TransformParams& b) const;
+
 
     float     get_min_hz(float fs) const;
     float     wanted_min_hz() const;
@@ -86,37 +89,41 @@ public:
       The Cwt will be computed in chunks who are powers of two. Given sample rate and wavelet_std_t,
       compute a good number of valid samples per chunk.
       */
-    virtual unsigned  next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
+    virtual unsigned  next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate ) const;
     unsigned  prev_good_size_gold( unsigned current_valid_samples_per_chunk, float sample_rate );
-    virtual unsigned  prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
-    virtual std::string toString();
+    virtual unsigned  prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate ) const;
+    virtual std::string toString() const;
 
     void      largest_scales_per_octave( float fs, float scales, float last_ok = 0 );
-    bool      is_small_enough( float fs );
+    bool      is_small_enough( float fs ) const;
     size_t    required_gpu_bytes(unsigned valid_samples_per_chunk, float sample_rate) const;
 
     unsigned        chunk_alignment(float fs) const;
-    static void     resetSingleton();
 private:
-    Cwt( float scales_per_octave=20, float wavelet_time_suppport=3 );
+    pChunk          computeChunkPart( pChunk ft, unsigned first_scale, unsigned n_scales );
 
     unsigned        find_bin( unsigned j ) const;
     unsigned        time_support_bin0( float fs ) const;
     float           j_to_hz( float sample_rate, unsigned j ) const;
     unsigned        hz_to_j( float sample_rate, float hz ) const;
-    unsigned        required_length( unsigned current_valid_samples_per_chunk, float fs, unsigned&r );
+    unsigned        required_length( unsigned current_valid_samples_per_chunk, float fs, unsigned&r ) const;
     void            scales_per_octave_internal( float );
     unsigned        chunkpart_alignment(unsigned c) const;
 
-    Signal::pBuffer inverse( Tfr::CwtChunk* );
-    Signal::pBuffer inverse( Tfr::CwtChunkPart* );
+    Signal::pMonoBuffer inverse( Tfr::CwtChunk* );
+    Signal::pMonoBuffer inverse( Tfr::CwtChunkPart* );
 
     float           _min_hz;
     float           _scales_per_octave;
     float           _tf_resolution;
     float           _least_meaningful_fraction_of_r;
     unsigned        _least_meaningful_samples_per_chunk;
-    static pTransform static_singleton;
+
+    std::map<int, Tfr::FftImplementation::Ptr> fft_instances;
+    std::set<int> fft_usage; // remove any that wasn't recently used
+    Tfr::FftImplementation::Ptr fft() const;
+    Tfr::FftImplementation::Ptr fft(int width); // width=0 -> don't care
+    void clearFft();
 
     /**
       Default value: _wavelet_time_suppport=3.

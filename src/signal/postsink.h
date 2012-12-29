@@ -22,8 +22,6 @@ class PostSink: public Sink
 public:    
     PostSink();
 
-    virtual void set_channel(unsigned c);
-
     /**
       For each Operation in sinks(), sets up a source and calls read(I). For
       performance reasons, different Operation's in sinks() may be chained into
@@ -37,8 +35,12 @@ public:
     virtual Signal::pBuffer read( const Signal::Interval& I );
 
 
+    /// @see readDirect
+    pOperation readDirectSource();
+
+
     /// @overload Operation::source()
-    virtual pOperation source() { return Sink::source(); }
+    virtual pOperation source();
 
 
     /// @overload Operation::source(pOperation)
@@ -74,9 +76,9 @@ public:
 
 
     /**
-      Will call invalidate_samples on all instances of Signal::Sink in sinks().
+      Call source()::Operation::invalidate_samples() to invalidate all instances of Signal::Sink in sinks().
       */
-    virtual void invalidate_samples( const Intervals& I );
+    virtual void invalidate_samples( const Intervals& );
 
     virtual std::string toString();
 
@@ -94,6 +96,11 @@ public:
     void                    filter(pOperation f);
 
 private:
+    void                    update_source();
+    void                    gcSinks();
+    Signal::pBuffer         readDirect( const Signal::Interval& I );
+    Signal::pBuffer         readSimple( const Signal::Interval& I );
+    Signal::pBuffer         readActivePassive( const Signal::Interval& I );
 
     pOperation              _filter;
 #ifndef SAWE_NO_MUTEX

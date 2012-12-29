@@ -3,24 +3,30 @@
 
 #include "stftkernel.h"
 
+template<typename T>
 void stftNormalizeInverse(
-        DataStorage<float>::Ptr wavep,
+        boost::shared_ptr<DataStorage<T> > wavep,
         unsigned length )
 {
-    CpuMemoryReadWrite<float, 2> in_wt = CpuMemoryStorage::ReadWrite<2>( wavep );
+    CpuMemoryReadWrite<T, 2> in_wt = CpuMemoryStorage::ReadWrite<2>( wavep );
 
     float v = 1.f/length;
+    int h = (int)in_wt.numberOfElements().height;
 
 #pragma omp parallel for
-    for (int y=0; y<(int)in_wt.numberOfElements().height; ++y)
+    for (int y=0; y<h; ++y)
     {
-        CpuMemoryReadWrite<float, 2>::Position pos( 0, y );
+        typename CpuMemoryReadWrite<T, 2>::Position pos( 0, y );
         for (pos.x=0; pos.x<in_wt.numberOfElements().width; ++pos.x)
         {
             in_wt.ref(pos) *= v;
         }
     }
 }
+
+
+template void stftNormalizeInverse(DataStorage<float>::Ptr, unsigned);
+template void stftNormalizeInverse(DataStorage<Tfr::ChunkElement>::Ptr, unsigned);
 
 
 void stftNormalizeInverse(
@@ -32,9 +38,10 @@ void stftNormalizeInverse(
     CpuMemoryWriteOnly<float, 2> out_wt = CpuMemoryStorage::WriteAll<2>( outwave );
 
     float v = 1.f/length;
+    int h = (int)in_wt.numberOfElements().height;
 
 #pragma omp parallel for
-    for (int y=0; y<(int)in_wt.numberOfElements().height; ++y)
+    for (int y=0; y<h; ++y)
     {
         CpuMemoryReadWrite<Tfr::ChunkElement, 2>::Position pos( 0, y );
         for (pos.x=0; pos.x<in_wt.numberOfElements().width; ++pos.x)
@@ -90,24 +97,24 @@ void stftAverage(
         Tfr::ChunkData::Ptr output,
         unsigned scales )
 {
-    unsigned width = scales;
+    int width = scales;
     int height = output->size().width/scales;
-    unsigned input_height = input->size().width/scales;
-    unsigned averaging = input_height / height;
+    int input_height = input->size().width/scales;
+    int averaging = input_height / height;
 
     Tfr::ChunkElement* in = CpuMemoryStorage::ReadOnly<1>( input ).ptr();
     Tfr::ChunkElement* out = CpuMemoryStorage::WriteAll<1>( output ).ptr();
 
-    BOOST_ASSERT( height > 1 );
+    EXCEPTION_ASSERT( height > 1 );
 
     float as = 1.f/averaging;
 #pragma omp parallel for
     for (int k=0; k<height; ++k)
     {
-        for (unsigned j=0; j<width; ++j)
+        for (int j=0; j<width; ++j)
         {
             float elem = 0.f;
-            for (unsigned a=0; a<averaging; ++a)
+            for (int a=0; a<averaging; ++a)
                 elem += abs(in[(k*averaging + a)*width + j]);
             out[k*width + j] = Tfr::ChunkElement(elem*as, 0);
         }

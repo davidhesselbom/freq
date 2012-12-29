@@ -22,6 +22,9 @@ Highly suggested reading: when to branch, merge, or rebase:
 http://nvie.com/posts/a-successful-git-branching-model/?
 http://www.mail-archive.com/dri-devel@lists.sourceforge.net/msg39091.html
 
+There are plenty of tips and tricks "on the internet", here is one page:
+http://wiki.videolan.org/Git
+
 For reference:
 http://git-scm.com/doc
 http://git-scm.com/book
@@ -83,10 +86,16 @@ git clone git@bitbucket.org:MuchDifferent/sonicawe.git
 cd sonicawe
 ls
 
-FAQ:
+When running clone you might this message:
 > Permission denied (publickey).
 > fatal: The remote end hung up unexpectedly
 If you get this message it probably means your bitbucket account haven't been given access to the source code yet. You also get this if your system's public SSH key doesn't match the SSH key you added to your bitbucket account.
+
+When getting new code from the server you want to rebase in most cases. To simplify this you can create an alias, like so:
+git config --global alias.up "pull --rebase"
+
+And to get new commits, run:
+git up
 
 
 CUDA
@@ -153,6 +162,9 @@ Where $QT is typically one of:
 /usr/local/Trolltech/Qt-*
 /usr/local/Qt*
 
+To build with openmp (which makes Sonic AWE way faster and is required for creating distribution packages) you need to get a later version of g++ than Xcode provides. To build with g++ 4.7; remove "-Xarch_x86_64" from g++-macx.conf, install macports, and run:
+sudo port install gcc47
+
 
 Build environment for Windows
 -----------------------------
@@ -214,15 +226,15 @@ When you first open the project in Qt Creator it will create some user specific 
 - De-select "Shadow build".
 - De-select "Embedded linux".
 
-You will also want to add QMAKESPEC to your ~/.bash_profile like this:
-export QMAKESPEC='macx-g++'
-
 Note that builds created through the deploy scripts (in the 'dist' folder) have explicit settings and build configurations for pretty much everything to ensure that two releases from the same code base behave the same. This is not the case for your user settings in Qt Creator or builds from within Visual C++. Another difference is that the deploy scripts are adding some extra predefined C/C++ DEFINES in addition to your local 'default' build.
 
 
 Developing Sonic AWE in OS X
 ----------------------------
 We're using the GNU Toolchain on Mac, we're not using Xcode. qmake is however capable of generating .xcodeproj files for Xcode and defaults to that on Mac. So if you see such files it's an indication that something is wrong with your .pro files. You may of course feel free to experiment with the Xcode environment if you prefer that. We're using the GNU Toolchain simply because it is less work to maintain due to all the similarities to the equivalent toolchain under Linux (Ubuntu).
+
+To build using the GNU Toolchain, add QMAKESPEC to your ~/.bash_profile like this:
+export QMAKESPEC='macx-g++'
 
 Build and debug using Qt Creator.
 It's suggested to use Qt Creator to edit as well.
@@ -253,9 +265,10 @@ To run the test suite. Execute this in the folder 'tests':
 For more info on running tests, see the runtests help:
 ./runtests.sh --help
 
-For instance, to only run the test 'mytest' you can run:
+For instance, to only run tests with 'mytest' in their name you can run:
 ./runtests.sh mytest
-(this also runs tests with the string 'mytest' in their name, such as 'thingmytest2')
+
+The argument to runtests.sh is parsed as regexp against the test name as it is written in the result list by runtests.sh.
 
 
 Packaging/deployment

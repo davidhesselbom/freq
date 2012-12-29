@@ -3,6 +3,7 @@
 // tools
 #include "support/sinksignalproxy.h"
 #include "support/toolbar.h"
+#include "widgets/valueslider.h"
 
 // ui
 #include "ui/comboboxaction.h"
@@ -18,6 +19,7 @@
 #include "tfr/cwt.h"
 #include "tfr/stft.h"
 #include "tfr/cepstrum.h"
+#include "tfr/drawnwaveform.h"
 #include "graphicsview.h"
 #include "sawe/application.h"
 #include "signal/buffersource.h"
@@ -36,11 +38,15 @@
 #include <QGLContext>
 #include <QSettings>
 
+// boost
+#include <boost/format.hpp>
+
 // todo remove
 #include "navigationcontroller.h"
 #include <QTimer>
 
 using namespace Ui;
+using namespace boost;
 
 #ifdef min
 #undef min
@@ -65,7 +71,7 @@ public:
             controller_(controller),
             prevSignal( o->getInterval() )
     {
-        BOOST_ASSERT( o );
+        EXCEPTION_ASSERT( o );
         Operation::source(o);
     }
 
@@ -91,6 +97,8 @@ public:
         }
 
         Operation::invalidate_samples( I );
+
+        view_->update();
     }
 
 
@@ -176,14 +184,14 @@ RenderController::
 
     {
         // Default values for rendercontroller
-        Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-        Ui::MainWindow* ui = main->getItems();
+        ::Ui::MainWindow* ui = getItems();
 #ifdef TARGET_hast
-        tf_resolution->setValue( 10 );
-        transform->actions().at(0)->trigger();
+        tf_resolution->setValue( 1<<14 );
+//        transform->actions().at(0)->trigger();
 #else
-        transform->actions().at(1)->trigger();
+//        transform->actions().at(1)->trigger();
 #endif
+        transform->actions().at(0)->trigger();
 
         ui->actionTransform_Stft->trigger();
         logScale->trigger();
@@ -196,7 +204,10 @@ RenderController::
 //        logScale->trigger();
 //#endif
 
-        main->getItems()->actionToggleTransformToolBox->setChecked( true );
+        Tfr::StftParams* p = model()->getParam<Tfr::StftParams>();
+        p->setWindow(Tfr::StftParams::WindowType_Hann, 0.75f);
+
+        ui->actionToggleTransformToolBox->setChecked( true );
     }
 }
 
@@ -205,7 +216,7 @@ RenderController::
         ~RenderController()
 {
     if (QGLContext::currentContext())
-        clearCachedHeightmap();
+        deleteTarget();
 }
 
 
@@ -236,6 +247,14 @@ void RenderController::
 
 
 void RenderController::
+        receiveSetBlackGrayscaleColors()
+{
+    model()->renderer->color_mode = Heightmap::Renderer::ColorMode_BlackGrayscale;
+    stateChanged();
+}
+
+
+void RenderController::
         receiveSetColorscaleColors()
 {
     model()->renderer->color_mode = Heightmap::Renderer::ColorMode_FixedColor;
@@ -255,6 +274,14 @@ void RenderController::
         receiveSetGreenWhiteColors()
 {
     model()->renderer->color_mode = Heightmap::Renderer::ColorMode_GreenWhite;
+    stateChanged();
+}
+
+
+void RenderController::
+        receiveSetGreenColors()
+{
+    model()->renderer->color_mode = Heightmap::Renderer::ColorMode_Green;
     stateChanged();
 }
 
@@ -285,8 +312,7 @@ void RenderController::
 {
     model()->renderer->draw_piano = value;
 
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-    Ui::MainWindow* ui = main->getItems();
+    ::Ui::MainWindow* ui = getItems();
 
     ui->actionToggle_cursor_marker->setEnabled( ui->actionToggle_t_grid->isChecked() || ui->actionToggle_hz_grid->isChecked() || ui->actionToggle_piano_grid->isChecked() );
 
@@ -299,8 +325,7 @@ void RenderController::
 {
     model()->renderer->draw_hz = value;
 
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-    Ui::MainWindow* ui = main->getItems();
+    ::Ui::MainWindow* ui = getItems();
 
     ui->actionToggle_cursor_marker->setEnabled( ui->actionToggle_t_grid->isChecked() || ui->actionToggle_hz_grid->isChecked() || ui->actionToggle_piano_grid->isChecked() );
 
@@ -313,8 +338,7 @@ void RenderController::
 {
     model()->renderer->draw_t = value;
 
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-    Ui::MainWindow* ui = main->getItems();
+    ::Ui::MainWindow* ui = getItems();
 
     ui->actionToggle_cursor_marker->setEnabled( ui->actionToggle_t_grid->isChecked() || ui->actionToggle_hz_grid->isChecked() || ui->actionToggle_piano_grid->isChecked() );
 
@@ -333,46 +357,44 @@ void RenderController::
 void RenderController::
         transformChanged()
 {
-    Tfr::Cwt& c = Tfr::Cwt::Singleton();
+    bool isCwt = dynamic_cast<const Tfr::Cwt*>(currentTransform());
 
-    // keep in sync with receiveSetTimeFrequencyResolution
-    float f = log(c.scales_per_octave()/2.L)/6;
-    int value = f * tf_resolution->maximum() + .5;
+    if (isCwt)
+    {
+        Tfr::Cwt& c = *model()->getParam<Tfr::Cwt>();
+        tf_resolution->setValue (c.scales_per_octave ());
+    }
+    else
+    {
+        Tfr::StftParams& s = *model()->getParam<Tfr::StftParams>();
+        tf_resolution->setValue (s.chunk_size ());
+    }
 
-    this->tf_resolution->setValue( value );
-
-
-    // keep in sync with receiveSetYScale
-    f = log(model()->renderer->y_scale)/8.f;
-    f = (f > 0 ? 1 : -1) * sqrtf( f > 0 ? f : -f );
-    value = (f + 1)/2 * yscale->maximum() + .5;
-
-    this->yscale->setValue( value );
-
+    this->yscale->setValue( model()->renderer->y_scale );
 
     // keep buttons in sync
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-    Ui::MainWindow* ui = main->getItems();
+    ::Ui::MainWindow* ui = getItems();
     if (model()->renderer->draw_piano)  hzmarker->setCheckedAction( ui->actionToggle_piano_grid );
     if (model()->renderer->draw_hz)  hzmarker->setCheckedAction( ui->actionToggle_hz_grid );
     switch( model()->renderer->color_mode )
     {
     case Heightmap::Renderer::ColorMode_Rainbow: color->setCheckedAction(ui->actionSet_rainbow_colors); break;
     case Heightmap::Renderer::ColorMode_Grayscale: color->setCheckedAction(ui->actionSet_grayscale); break;
+    case Heightmap::Renderer::ColorMode_BlackGrayscale: color->setCheckedAction(ui->actionSet_blackgrayscale); break;
     case Heightmap::Renderer::ColorMode_FixedColor: color->setCheckedAction(ui->actionSet_colorscale); break;
     case Heightmap::Renderer::ColorMode_GreenRed: color->setCheckedAction(ui->actionSet_greenred_colors); break;
     case Heightmap::Renderer::ColorMode_GreenWhite: color->setCheckedAction(ui->actionSet_greenwhite_colors); break;
+    case Heightmap::Renderer::ColorMode_Green: color->setCheckedAction(ui->actionSet_green_colors); break;
     }
     ui->actionSet_contour_plot->setChecked(model()->renderer->draw_contour_plot);
     ui->actionToggleOrientation->setChecked(!model()->renderer->left_handed_axes);
 
 
     // Only CWT benefits a lot from larger chunks, keep a lower min-framerate than otherwise
-    if (dynamic_cast<Tfr::Cwt*>(model()->collections[0]->transform().get()))
-        model()->project()->worker.min_fps( 2 );
+    if (dynamic_cast<const Tfr::Cwt*>(model()->collections[0]->transform()))
+        model()->project()->worker.min_fps( 1 );
     else
-        model()->project()->worker.min_fps( 15 );
-
+        model()->project()->worker.min_fps( 4 );
 
     // clear worker assumptions of target
     model()->project()->worker.target(model()->renderSignalTarget);
@@ -380,11 +402,11 @@ void RenderController::
 
 
 void RenderController::
-        receiveSetYScale( int value )
+        receiveSetYScale( qreal value )
 {
     // Keep in sync with transformChanged()
-    float f = 2.f * value / yscale->maximum() - 1.f;
-    model()->renderer->y_scale = exp( 8.f*f*f * (f>0?1:-1));
+    //float f = 2.f * value / yscale->maximum() - 1.f;
+    model()->renderer->y_scale = value; //exp( 8.f*f*f * (f>0?1:-1));
 
     stateChanged();
 
@@ -393,56 +415,91 @@ void RenderController::
 
 
 void RenderController::
-        receiveSetTimeFrequencyResolution( int value )
+        receiveSetTimeFrequencyResolution( qreal value )
 {
-    float FS = model()->project()->worker.source()->sample_rate();
+    bool isCwt = dynamic_cast<const Tfr::Cwt*>(currentTransform());
+    if (isCwt)
+        model()->getParam<Tfr::Cwt>()->scales_per_octave ( value );
+    else
+        model()->getParam<Tfr::StftParams>()->set_approximate_chunk_size( value );
 
-    Tfr::Cwt& c = Tfr::Cwt::Singleton();
+    stateChanged();
 
-    // Keep in sync with transformChanged()
-    float f = value / (float)tf_resolution->maximum();
-
-    bool isCwt = dynamic_cast<Tfr::Cwt*>(model()->collections[0]->transform().get());
-    // Validate scales per octave if transform is Cwt. CwtFilter will validate scales per octave when Cwt is used again.
-    c.scales_per_octave( 2*exp( 6.L*f ), isCwt?FS:0 ); // scales_per_octave >= 2
-
-    float wavelet_default_time_support = c.wavelet_default_time_support();
-    float wavelet_fast_time_support = c.wavelet_time_support();
-    c.wavelet_time_support(wavelet_default_time_support);
-
-    Tfr::Stft& s = Tfr::Stft::Singleton();
-    unsigned prev_chunk_size = s.chunk_size();
-    s.set_approximate_chunk_size( c.wavelet_time_support_samples(FS)/c.wavelet_time_support() );
-
-    c.wavelet_fast_time_support( wavelet_fast_time_support );
-
-
-    if (isCwt || prev_chunk_size!=s.chunk_size())
-    {
-        model()->renderSignalTarget->post_sink()->invalidate_samples( Signal::Intervals::Intervals_ALL );
-
-        stateChanged();
-
-        view->emitTransformChanged();
-    }
-
-    tf_resolution->setToolTip(QString("Time/frequency resolution\nMorlet std: %1 (%2 scales/octave)\nSTFT window: %3 samples").arg(c.sigma(), 0, 'f', 1).arg(c.scales_per_octave(), 0, 'f', 1).arg(s.chunk_size()));
+    view->emitTransformChanged();
 }
 
 
 void RenderController::yscaleIncrease()
-{    yscale->triggerAction( QAbstractSlider::SliderPageStepAdd ); stateChanged(); }
+{    yscale->triggerAction( QAbstractSlider::SliderSingleStepAdd ); stateChanged(); }
 void RenderController::yscaleDecrease()
-{    yscale->triggerAction( QAbstractSlider::SliderPageStepSub ); stateChanged(); }
+{    yscale->triggerAction( QAbstractSlider::SliderSingleStepSub ); stateChanged(); }
 void RenderController::tfresolutionIncrease()
 {    tf_resolution->triggerAction( QAbstractSlider::SliderPageStepAdd ); stateChanged(); }
 void RenderController::tfresolutionDecrease()
 {    tf_resolution->triggerAction( QAbstractSlider::SliderPageStepSub ); stateChanged(); }
 
 
+void RenderController::
+        updateTransformParams()
+{
+    Tfr::Transform* t = currentTransform();
+    if (!t)
+        return;
+
+    if (Tfr::Stft* s = dynamic_cast<Tfr::Stft*>(t))
+    {
+        Tfr::StftParams* sp = model()->getParam<Tfr::StftParams>();
+        if (*s->transformParams() != *sp)
+            setCurrentFilterTransform(sp->createTransform());
+        return;
+    }
+    if (Tfr::Cwt* s = dynamic_cast<Tfr::Cwt*>(t))
+    {
+        Tfr::Cwt* sp = model()->getParam<Tfr::Cwt>();
+        if (*s->transformParams() != *sp)
+            setCurrentFilterTransform(sp->createTransform());
+        return;
+    }
+    if (Tfr::Cepstrum* s = dynamic_cast<Tfr::Cepstrum*>(t))
+    {
+        Tfr::CepstrumParams* sp = model()->getParam<Tfr::CepstrumParams>();
+        if (*s->transformParams() != *sp)
+            setCurrentFilterTransform(sp->createTransform());
+        return;
+    }
+    if (Tfr::DrawnWaveform* s = dynamic_cast<Tfr::DrawnWaveform*>(t))
+    {
+        Tfr::DrawnWaveform* sp = model()->getParam<Tfr::DrawnWaveform>();
+        if (*s->transformParams() != *sp)
+            setCurrentFilterTransform(sp->createTransform());
+        return;
+    }
+
+    throw std::logic_error(str(format("updateTransformParams, unkown transform: %s") % vartype(*t)).c_str());
+}
+
+
+void RenderController::
+        setCurrentFilterTransform( Tfr::pTransform t )
+{
+    Tfr::StftParams& s = *model()->getParam<Tfr::StftParams>();
+    Tfr::Cwt& c = *model()->getParam<Tfr::Cwt>();
+
+    bool isCwt = dynamic_cast<const Tfr::Cwt*>(t.get ());
+    if (isCwt)
+        tf_resolution->setToolTip(QString("Time/frequency resolution\nMorlet std: %1\nScales per octave").arg(c.sigma(), 0, 'f', 1));
+    else
+        tf_resolution->setToolTip(QString("Time/frequency resolution\nSTFT window: %1 samples").arg(s.chunk_size()));
+
+    currentFilter()->transform( t );
+}
+
+
 Signal::PostSink* RenderController::
         setBlockFilter(Signal::Operation* blockfilter)
 {
+    bool wasCwt = dynamic_cast<const Tfr::Cwt*>(currentTransform());
+
     BlockFilterSink* bfs;
     Signal::pOperation blockop( blockfilter );
     Signal::pOperation channelop( bfs = new BlockFilterSink(blockop, model(), view, this));
@@ -458,28 +515,88 @@ Signal::PostSink* RenderController::
 
     stateChanged();
 
-    view->emitTransformChanged();
-
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-    Ui::MainWindow* ui = main->getItems();
+    ::Ui::MainWindow* ui = getItems();
 
     ui->actionToggle_piano_grid->setVisible( true );
     hz_scale->setEnabled( true );
 
+
+    bool isCwt = dynamic_cast<const Tfr::Cwt*>(currentTransform());
+
+    Tfr::StftParams& s = *model()->getParam<Tfr::StftParams>();
+    Tfr::Cwt& c = *model()->getParam<Tfr::Cwt>();
+    float FS = headSampleRate();
+
+    float wavelet_default_time_support = c.wavelet_default_time_support();
+    float wavelet_fast_time_support = c.wavelet_time_support();
+    c.wavelet_time_support(wavelet_default_time_support);
+
+    if (isCwt && !wasCwt)
+    {
+        tf_resolution->setRange (2, 40);
+        tf_resolution->setDecimals (1);
+        c.scales_per_octave (s.chunk_size ()/(c.wavelet_time_support_samples(FS)/c.wavelet_time_support()/c.scales_per_octave ()));
+        // transformChanged updates value accordingly
+    }
+
+    if (!isCwt && wasCwt)
+    {
+        tf_resolution->setRange (1<<8, 1<<20, Widgets::ValueSlider::Logaritmic);
+        tf_resolution->setDecimals (0);
+        s.set_approximate_chunk_size( c.wavelet_time_support_samples(FS)/c.wavelet_time_support() );
+        // transformChanged updates value accordingly
+    }
+
+    c.wavelet_fast_time_support( wavelet_fast_time_support );
+
+    view->emitTransformChanged();
     return ps;
+}
+
+
+Tfr::Filter* RenderController::
+        currentFilter()
+{
+    Signal::pTarget t = model()->renderSignalTarget;
+    Signal::PostSink* ps = t->post_sink();
+    if (ps->sinks().empty())
+        return 0;
+    BlockFilterSink* bfs = dynamic_cast<BlockFilterSink*>(ps->sinks()[0].get());
+    EXCEPTION_ASSERT( bfs != 0 );
+    Tfr::Filter* filter = dynamic_cast<Tfr::Filter*>(bfs->Operation::source().get());
+    return filter;
 }
 
 
 Tfr::Transform* RenderController::
         currentTransform()
 {
-    Signal::PostSink* ps = model()->renderSignalTarget->post_sink();
-    if (ps->sinks().empty())
-        return 0;
-    BlockFilterSink* bfs = dynamic_cast<BlockFilterSink*>(ps->sinks()[0].get());
-    BOOST_ASSERT( bfs != 0 );
-    Tfr::Filter* filter = dynamic_cast<Tfr::Filter*>(bfs->Operation::source().get());
-    return filter->transform().get();
+    Tfr::Filter* f = currentFilter();
+    return f?f->transform().get():0;
+}
+
+
+float RenderController::
+        headSampleRate()
+{
+    return model()->project()->head->head_source()->sample_rate();
+}
+
+
+float RenderController::
+        currentTransformMinHz()
+{
+    Tfr::Transform* t = currentTransform();
+    EXCEPTION_ASSERT(t);
+    return t->transformParams()->freqAxis(headSampleRate()).min_hz;
+}
+
+
+::Ui::MainWindow* RenderController::
+        getItems()
+{
+    ::Ui::SaweMainWindow* main = dynamic_cast< ::Ui::SaweMainWindow*>(model()->project()->mainWindow());
+    return main->getItems();
 }
 
 
@@ -564,8 +681,7 @@ void RenderController::
 
     setBlockFilter( drawnwaveformblock );
 
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
-    Ui::MainWindow* ui = main->getItems();
+    ::Ui::MainWindow* ui = getItems();
 
     hz_scale->setEnabled( false );
     if (ui->actionToggle_piano_grid->isChecked())
@@ -580,14 +696,14 @@ void RenderController::
 void RenderController::
         receiveLinearScale()
 {
-    float fs = model()->project()->head->head_source()->sample_rate();
+    float fs = headSampleRate();
 
     Tfr::FreqAxis fa;
     fa.setLinear( fs );
 
-    if (currentTransform() && fa.min_hz < currentTransform()->freqAxis(fs).min_hz)
+    if (currentTransform() && fa.min_hz < currentTransformMinHz())
     {
-        fa.min_hz = currentTransform()->freqAxis(fs).min_hz;
+        fa.min_hz = currentTransformMinHz();
         fa.f_step = fs/2 - fa.min_hz;
     }
 
@@ -601,19 +717,20 @@ void RenderController::
 void RenderController::
         receiveLogScale()
 {
-    float fs = model()->project()->head->head_source()->sample_rate();
+    float fs = headSampleRate();
 
     Tfr::FreqAxis fa;
+    Tfr::Cwt* cwt = model()->getParam<Tfr::Cwt>();
     fa.setLogarithmic(
-            Tfr::Cwt::Singleton().wanted_min_hz(),
-            Tfr::Cwt::Singleton().get_max_hz(fs) );
+            cwt->wanted_min_hz(),
+            cwt->get_max_hz(fs) );
 
-    if (currentTransform() && fa.min_hz < currentTransform()->freqAxis(fs).min_hz)
+    if (currentTransform() && fa.min_hz < currentTransformMinHz())
     {
         // Happens typically when currentTransform is a cepstrum transform with a short window size
         fa.setLogarithmic(
-                currentTransform()->freqAxis(fs).min_hz,
-                Tfr::Cwt::Singleton().get_max_hz(fs) );
+                currentTransformMinHz(),
+                cwt->get_max_hz(fs) );
     }
 
     model()->display_scale( fa );
@@ -626,16 +743,16 @@ void RenderController::
 void RenderController::
         receiveCepstraScale()
 {
-    float fs = model()->project()->head->head_source()->sample_rate();
+    float fs = headSampleRate();
 
     Tfr::FreqAxis fa;
-    fa.setQuefrencyNormalized( fs, Tfr::Cepstrum::Singleton().chunk_size() );
+    fa.setQuefrencyNormalized( fs, model()->getParam<Tfr::CepstrumParams>()->chunk_size() );
 
-    if (currentTransform() && fa.min_hz < currentTransform()->freqAxis(fs).min_hz)
+    if (currentTransform() && fa.min_hz < currentTransformMinHz())
     {
         // min_hz = 2*fs/window_size;
         // window_size = 2*fs/min_hz;
-        fa.setQuefrencyNormalized( fs, 2*fs/currentTransform()->freqAxis(fs).min_hz );
+        fa.setQuefrencyNormalized( fs, 2*fs/currentTransformMinHz() );
     }
 
     model()->display_scale( fa );
@@ -675,7 +792,7 @@ void RenderController::
 RenderModel *RenderController::
         model()
 {
-    BOOST_ASSERT( view );
+    EXCEPTION_ASSERT( view );
     return view->model;
 }
 
@@ -683,7 +800,7 @@ RenderModel *RenderController::
 void RenderController::
         setupGui()
 {
-    Ui::SaweMainWindow* main = dynamic_cast<Ui::SaweMainWindow*>(model()->project()->mainWindow());
+    ::Ui::SaweMainWindow* main = dynamic_cast< ::Ui::SaweMainWindow*>(model()->project()->mainWindow());
     toolbar_render = new Support::ToolBar(main);
     toolbar_render->setObjectName(QString::fromUtf8("toolBarRenderController"));
     toolbar_render->setWindowTitle(QApplication::translate("MainWindow", "toolBar", 0, QApplication::UnicodeUTF8));
@@ -692,13 +809,13 @@ void RenderController::
     toolbar_render->setToolButtonStyle(Qt::ToolButtonIconOnly);
     main->addToolBar(Qt::BottomToolBarArea, toolbar_render);
 
-    connect(main->getItems()->actionToggleTransformToolBox, SIGNAL(toggled(bool)), toolbar_render, SLOT(setVisible(bool)));
-    connect((Support::ToolBar*)toolbar_render, SIGNAL(visibleChanged(bool)), main->getItems()->actionToggleTransformToolBox, SLOT(setChecked(bool)));
+    // Find Qt Creator managed actions
+    ::Ui::MainWindow* ui = main->getItems();
+
+    connect(ui->actionToggleTransformToolBox, SIGNAL(toggled(bool)), toolbar_render, SLOT(setVisible(bool)));
+    connect((Support::ToolBar*)toolbar_render, SIGNAL(visibleChanged(bool)), ui->actionToggleTransformToolBox, SLOT(setChecked(bool)));
 
     main->installEventFilter( this );
-
-    // Find Qt Creator managed actions
-    Ui::MainWindow* ui = main->getItems();
 
 
     // ComboBoxAction* hzmarker
@@ -729,14 +846,22 @@ void RenderController::
         color->addActionItem( ui->actionSet_rainbow_colors );
 #endif
         color->addActionItem( ui->actionSet_greenwhite_colors );
+        color->addActionItem( ui->actionSet_green_colors );
         color->addActionItem( ui->actionSet_grayscale );
+        color->addActionItem( ui->actionSet_blackgrayscale );
         toolbar_render->addWidget( color );
+
+        foreach(QAction*a,color->actions ())
+            a->setChecked (false);
 
         connect(ui->actionSet_rainbow_colors, SIGNAL(triggered()), SLOT(receiveSetRainbowColors()));
         connect(ui->actionSet_grayscale, SIGNAL(triggered()), SLOT(receiveSetGrayscaleColors()));
+        connect(ui->actionSet_blackgrayscale, SIGNAL(triggered()), SLOT(receiveSetBlackGrayscaleColors()));
         connect(ui->actionSet_colorscale, SIGNAL(triggered()), SLOT(receiveSetColorscaleColors()));
         connect(ui->actionSet_greenred_colors, SIGNAL(triggered()), SLOT(receiveSetGreenRedColors()));
         connect(ui->actionSet_greenwhite_colors, SIGNAL(triggered()), SLOT(receiveSetGreenWhiteColors()));
+        connect(ui->actionSet_green_colors, SIGNAL(triggered()), SLOT(receiveSetGreenColors()));
+
 #if defined(TARGET_hast)
         color->setCheckedAction(ui->actionSet_greenwhite_colors);
         ui->actionSet_greenwhite_colors->trigger();
@@ -748,6 +873,7 @@ void RenderController::
 
     // ComboBoxAction* channels
     {   channelselector = new QToolButton(toolbar_render);
+        channelselector->setVisible (true);
         channelselector->setObjectName("channelselector");
         channelselector->setCheckable( false );
         channelselector->setText("Channels");
@@ -779,6 +905,7 @@ void RenderController::
         transform->addActionItem( ui->actionTransform_Cwt );
         transform->addActionItem( ui->actionTransform_Cepstrum );
         transform->addActionItem( ui->actionTransform_Waveform );
+
 //        transform->addActionItem( ui->actionTransform_Cwt_phase );
 //        transform->addActionItem( ui->actionTransform_Cwt_reassign );
 //        transform->addActionItem( ui->actionTransform_Cwt_ridge );
@@ -872,17 +999,17 @@ void RenderController::
 
 
     // QSlider * yscale
-    {   yscale = new QSlider( toolbar_render );
+    {   yscale = new Widgets::ValueSlider( toolbar_render );
         yscale->setObjectName("yscale");
         yscale->setOrientation( Qt::Horizontal );
-        yscale->setMaximum( 10000 );
-        yscale->setValue( 5000 );
+        yscale->setRange (0.0003, 2000, Widgets::ValueSlider::LogaritmicZeroMin );
+        yscale->setValue ( 1 );
+        yscale->setDecimals (2);
         yscale->setToolTip( "Intensity level" );
-        yscale->setPageStep( 100 );
-        yscale->setSingleStep( 20 );
+        yscale->setSliderSize ( 300 );
         toolbar_render->addWidget( yscale );
 
-        connect(yscale, SIGNAL(valueChanged(int)), SLOT(receiveSetYScale(int)));
+        connect(yscale, SIGNAL(valueChanged(qreal)), SLOT(receiveSetYScale(qreal)));
         receiveSetYScale(yscale->value());
 
         QAction* yscaleIncrease = new QAction(yscale);
@@ -900,16 +1027,16 @@ void RenderController::
 
 
     // QSlider * tf_resolution
-    {   tf_resolution = new QSlider( toolbar_render );
-        tf_resolution->setObjectName("tf_resolution");
-        tf_resolution->setOrientation( Qt::Horizontal );
-        tf_resolution->setMaximum( 10000 );
-        tf_resolution->setValue( 3000 );
-        tf_resolution->setToolTip( "Time/frequency resolution." );
-        tf_resolution->setPageStep( 100 );
-        toolbar_render->addWidget( tf_resolution );
+    {   tf_resolution = new Widgets::ValueSlider( toolbar_render );
+        tf_resolution->setObjectName ("tf_slider");
+        tf_resolution->setRange (1<<8, 1<<20, Widgets::ValueSlider::Logaritmic);
+        tf_resolution->setValue ( 4096 );
+        tf_resolution->setToolTip ("Window size (time/frequency resolution) ");
+        tf_resolution->setSliderSize ( 300 );
+        tf_resolution->updateLineEditOnValueChanged (false); // RenderController does that instead
+        toolbar_render->addWidget (tf_resolution);
 
-        connect(tf_resolution, SIGNAL(valueChanged(int)), SLOT(receiveSetTimeFrequencyResolution(int)));
+        connect(tf_resolution, SIGNAL(valueChanged(qreal)), SLOT(receiveSetTimeFrequencyResolution(qreal)));
         receiveSetTimeFrequencyResolution(tf_resolution->value());
 
         QAction* tfresolutionIncrease = new QAction(yscale);
@@ -925,13 +1052,19 @@ void RenderController::
         tf_resolution->addAction( tfresolutionDecrease );
     }
 
-    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(updateFreqAxis()));
-    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(updateChannels()));
-    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(transformChanged()));
+    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(updateFreqAxis()), Qt::QueuedConnection);
+    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(updateAmplitudeAxis()), Qt::QueuedConnection);
+    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(updateChannels()), Qt::QueuedConnection);
+    connect(this->view.data(), SIGNAL(transformChanged()), SLOT(transformChanged()), Qt::QueuedConnection);
+
+    // Validate the current transform used for rendering before each rendering.
+    // Lazy updating with easier and direct access to transform parameters.
+    connect(this->view.data(), SIGNAL(prePaint()), SLOT(updateTransformParams()), Qt::DirectConnection);
 
     // Release cuda buffers and disconnect them from OpenGL before destroying
     // OpenGL rendering context. Just good housekeeping.
-    connect(view, SIGNAL(destroying()), SLOT(clearCachedHeightmap()));
+    connect(this->view.data(), SIGNAL(destroying()), SLOT(deleteTarget()), Qt::DirectConnection);
+    connect(Sawe::Application::global_ptr(), SIGNAL(clearCachesSignal()), SLOT(clearCaches()), Qt::DirectConnection);
 
     // Create the OpenGL rendering context early. Because we want to create the
     // cuda context (in main.cpp) and bind it to an OpenGL context before the
@@ -954,6 +1087,7 @@ void RenderController::
 
     main->centralWidget()->layout()->setMargin(0);
     main->centralWidget()->layout()->addWidget(view->graphicsview);
+    main->centralWidget()->setFocus ();
 
     view->emitTransformChanged();
 
@@ -970,13 +1104,21 @@ void RenderController::
 
 
 void RenderController::
-        clearCachedHeightmap()
+        deleteTarget()
+{
+    clearCaches();
+
+    model()->renderSignalTarget.reset();
+}
+
+
+void RenderController::
+        clearCaches()
 {
     // Stop worker from producing any more heightmaps by disconnecting
     // the collection callback from worker.
     if (model()->renderSignalTarget == model()->project()->worker.target())
         model()->project()->worker.target(Signal::pTarget());
-    model()->renderSignalTarget.reset();
 
 
     // Assuming calling thread is the GUI thread.
@@ -985,6 +1127,9 @@ void RenderController::
     // context
     foreach( const boost::shared_ptr<Heightmap::Collection>& collection, model()->collections )
         collection->reset();
+
+
+    // TODO clear stuff from FftImplementations somewhere not here
 }
 
 
@@ -1008,6 +1153,49 @@ void RenderController::
     default:
         break;
     }
+}
+
+
+void RenderController::
+        updateAmplitudeAxis()
+{
+//    Tfr::Filter* filter = model()->block_filter ();
+//    Heightmap::StftToBlock* stftblock = dynamic_cast<Heightmap::StftToBlock*>( filter );
+
+/*    switch (model()->amplitude_axis ())
+    {
+    case Heightmap::AmplitudeAxis_Real:
+        break;
+    default:
+        stftblock->freqNormalization.reset ();
+        break;
+    }*/
+
+    view->emitAxisChanged();
+    stateChanged();
+
+//    switch (model()->amplitude_axis ())
+/*    switch (model()->amplitude_axis ())
+    {
+    case Heightmap::AmplitudeAxis_Linear:
+        receiveLinearAmplitude();
+        break;
+
+    case Heightmap::AmplitudeAxis_Logarithmic:
+        receiveLogAmplitude();
+        break;
+
+    case Heightmap::AmplitudeAxis_5thRoot:
+        receiveFifthAmplitude();
+        break;
+
+    case Heightmap::AmplitudeAxis_Real:
+        receiveLinearAmplitude();
+        break;
+
+    default:
+        break;
+    }*/
 }
 
 
@@ -1090,7 +1278,7 @@ void RenderController::
 void RenderController::
         windowGotFocus()
 {
-    model()->project()->worker.min_fps( 2 );
+    model()->project()->worker.min_fps( 4 );
 }
 
 

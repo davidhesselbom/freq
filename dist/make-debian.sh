@@ -31,7 +31,7 @@ cp src/${packagename} src/${packagename}org
 echo "========================== Building ==========================="
 echo "Building ${packagename} cuda ${versiontag}"
 
-if [ ! -z "`which nvcc`" ]; then
+if [ ! -z "`which nvcc`" ] && [ "Y" == "$buildcuda" ]; then
     qmaketarget="${qmaketarget} CONFIG+=usecuda CONFIG+=customtarget CUSTOMTARGET=${packagename}-cuda"
 
     echo "qmaketarget: $qmaketarget"
@@ -48,7 +48,7 @@ if [ ! -z "`which nvcc`" ]; then
     LD_RUN_PATH=/usr/share/${packagename}
     time make -j`cat /proc/cpuinfo | grep -c processor`
 else
-    echo "Couldn't find nvcc, skipping build of \'${packagename}-cuda\'.";
+    echo "Couldn't find nvcc, skipping build of '${packagename}-cuda'.";
 fi
 
 mv src/${packagename}org src/${packagename}

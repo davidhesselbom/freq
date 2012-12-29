@@ -15,21 +15,10 @@ public:
     /**
       This computes the Cepstrum chunk covering a given interval.
       */
-    ChunkAndInverse computeChunk( const Signal::Interval& I );
+    Signal::Interval requiredInterval( const Signal::Interval& I, Tfr::pTransform t );
 
 
-    /**
-      Get the Tfr::Transform for this operation.
-      */
-    Tfr::pTransform transform() const;
-
-
-    /**
-      Set the Tfr::Transform for this operation and update _invalid_samples.
-      Will throw throw std::invalid_argument if 'm' is not an instance of
-      Cepstrum.
-      */
-    void transform( Tfr::pTransform m );
+    virtual void invalidate_samples(const Signal::Intervals& I);
 
 
     bool exclude_end_block;

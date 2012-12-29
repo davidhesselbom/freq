@@ -24,6 +24,8 @@ TooltipController::
             comments_(comments),
             current_view_(0)
 {
+    setEnabled( false );
+
     setupGui();
 }
 
@@ -188,7 +190,7 @@ void TooltipController::
     else if(1 < current_model()->markers)
         current_model()->markers--;
 
-    BOOST_ASSERT(current_model()->comment);
+    EXCEPTION_ASSERT(current_model()->comment);
 
     current_model()->automarking = TooltipModel::ManualMarkers;
     current_model()->showToolTip(current_model()->pos() );
@@ -200,11 +202,12 @@ void TooltipController::
 void TooltipController::
         changeEvent(QEvent *event)
 {
-    if (event->type() & QEvent::EnabledChange)
+    if (event->type() == QEvent::EnabledChange)
     {
         if (!isEnabled())
         {
-            hover_info_action_->setChecked( false );
+            if (hover_info_action_)
+                hover_info_action_->setChecked( false );
             setCurrentView(0);
         }
 

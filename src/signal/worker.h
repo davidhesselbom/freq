@@ -165,10 +165,10 @@ public:
 
 
     /**
-      The current working point.
+      The current working point. Not const because a Mutex lock is needed.
       */
-    pOperation          source() const;
-    Signal::pTarget     target() const;
+    pOperation          source();
+    Signal::pTarget     target();
 
     /**
       Setting a new target also sets a new todo list.
@@ -194,7 +194,7 @@ public:
     float               requested_fps() const;
     void                requested_fps(float, float cheat=-1);
 
-    static bool         is_cheating();
+    bool                is_cheating();
 
     /**
       source()->number_of_samples() may change during a workOne() call. This
@@ -209,8 +209,9 @@ public:
 	  Throws an std::exception if one has been caught by run()
 	  */
 	void				checkForErrors();
-#endif
 
+    void                stopRunning();
+#endif
 
 private:
     /**
@@ -229,7 +230,7 @@ private:
       is rebuilt each time a new region is requested. It is worked off in a outward direction
       from the variable center.
       */
-    Intervals fetch_todo_list();
+    void update_todo_list();
 
 #ifndef SAWE_NO_MUTEX
     /**
@@ -238,7 +239,6 @@ private:
     virtual void run();
 #endif
 
-    //void todo_list( const Intervals& v );
 
     /**
       Self explanatory.
@@ -266,18 +266,20 @@ private:
 
 #ifndef SAWE_NO_MUTEX
     /**
-      Thread safety for addCallback, removeCallback and callCallbacks.
-      */
-    QMutex _callbacks_lock;
-#endif
-
-
-#ifndef SAWE_NO_MUTEX
-    /**
       Thread safety for _todo_list.
       */
     QMutex _todo_lock;
-    QWaitCondition _todo_condition;
+    QMutex _work_lock;
+    QWaitCondition _work_condition;
+
+    /**
+     */
+    bool _keep_running;
+
+    /**
+      Thread safety for _target.
+      */
+    QMutex _target_lock;
 #endif
 
     Signal::pTarget _target;
@@ -328,7 +330,6 @@ private:
       Worker::run and stored. A client may poll with: caught_exception.what()
       */
     std::string _caught_exception;
-    std::string _caught_invalid_argument;
 #endif
 };
 // typedef boost::shared_ptr<Worker> pWorker;

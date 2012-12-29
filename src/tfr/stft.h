@@ -4,13 +4,13 @@
 #include "transform.h"
 #include "chunk.h"
 #include "fftimplementation.h"
+#include "stftparams.h"
+#include "complexbuffer.h"
 
 // std
 #include <vector>
 #include <complex>
 
-// gpumisc
-#include "HasSingleton.h"
 
 namespace Tfr {
 
@@ -20,137 +20,86 @@ class StftChunk;
 
 /**
 Computes the complex Fast Fourier Transform of a Signal::Buffer.
-
-TODO remove HasSingleton
-
 */
-class SaweDll Fft: public Transform, public HasSingleton<Fft, Transform>
+class SaweDll Fft: public Transform, public TransformParams
 {
 public:
     Fft( bool computeRedundant=false );
     ~Fft();
 
-    virtual pChunk operator()( Signal::pBuffer b ) { return forward(b); }
+
+    // Implementing Transform
+    virtual const TransformParams* transformParams() const { return this; }
+    virtual pChunk operator()( Signal::pMonoBuffer b ) { return forward(b); }
 
     /// Fft::inverse does not normalize the result. To normalize it you have to divide each element with the length of the buffer.
-    virtual Signal::pBuffer inverse( pChunk c ) { return backward(c); }
-    virtual FreqAxis freqAxis( float FS );
-    virtual float displayedTimeResolution( float FS, float hz );
-    virtual unsigned next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
-    virtual unsigned prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
-    virtual std::string toString();
+    virtual Signal::pMonoBuffer inverse( pChunk c ) { return backward(c); }
 
-    pChunk forward( Signal::pBuffer );
-    Signal::pBuffer backward( pChunk );
 
-    static unsigned lChunkSizeS(unsigned x, unsigned multiple=1);
-    static unsigned sChunkSizeG(unsigned x, unsigned multiple=1);
+    // Implementing TransformParams
+    virtual pTransform createTransform() const;
+    virtual float displayedTimeResolution( float FS, float hz ) const;
+    virtual FreqAxis freqAxis( float FS ) const;
+    virtual unsigned next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate ) const;
+    virtual unsigned prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate ) const;
+    virtual std::string toString() const;
+    virtual bool operator==(const TransformParams&) const;
+
+
+    pChunk forward( Signal::pMonoBuffer );
+    Signal::pMonoBuffer backward( pChunk );
+
+    unsigned lChunkSizeS(unsigned x, unsigned multiple=1);
+    unsigned sChunkSizeG(unsigned x, unsigned multiple=1);
 
 private:
     bool _compute_redundant;
+    FftImplementation::Ptr fft;
 };
+
 
 /**
 Computes the Short-Time Fourier Transform, or Windowed Fourier Transform.
 
-TODO remove HasSingleton
-
 @see Stft::operator()
 */
-class SaweDll Stft: public Transform, public HasSingleton<Stft,Transform>
+class SaweDll Stft: public Transform
 {
 public:
-    enum WindowType
-    {
-        WindowType_Rectangular,
-        WindowType_Hann,
-        WindowType_Hamming,
-        WindowType_Tukey,
-        WindowType_Cosine,
-        WindowType_Lanczos,
-        WindowType_Triangular,
-        WindowType_Gaussian,
-        WindowType_BarlettHann,
-        WindowType_Blackman,
-        WindowType_Nuttail,
-        WindowType_BlackmanHarris,
-        WindowType_BlackmanNuttail,
-        WindowType_FlatTop,
-        WindowType_NumberOfWindowTypes
-    };
+    Stft(const StftParams&s = StftParams());
+    Stft(const Stft&);
 
-    Stft();
+    StftParams params() const { return p; }
+    virtual const TransformParams* transformParams() const { return &p; }
 
     /**
       The contents of the input Signal::pBuffer is converted to complex values.
       */
-    virtual pChunk operator()( Signal::pBuffer );
+    virtual pChunk operator()( Signal::pMonoBuffer );
     /// Stft::inverse does normalize the result (to the contrary of Fft::inverse)
-    virtual Signal::pBuffer inverse( pChunk );
-    virtual FreqAxis freqAxis( float FS );
-    virtual float displayedTimeResolution( float FS, float hz );
-    virtual unsigned next_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
-    virtual unsigned prev_good_size( unsigned current_valid_samples_per_chunk, float sample_rate );
-    virtual std::string toString();
-
-    unsigned increment();
-    unsigned chunk_size() { return _window_size; }
-    unsigned set_approximate_chunk_size( unsigned preferred_size );
-
-    /// @ Try to use set_approximate_chunk_size(unsigned) unless you need an explicit stft size
-    void set_exact_chunk_size( unsigned chunk_size ) { _window_size = chunk_size; }
-
-    /**
-        If false (default), operator() will do a real-to-complex transform
-        instead of a full complex-to-complex.
-
-        (also known as R2C and C2R transforms are being used instead of C2C
-        forward and C2C backward)
-    */
-    bool compute_redundant() { return _compute_redundant; }
-    void compute_redundant(bool);
-
-    unsigned averaging() { return _averaging; }
-    void averaging(unsigned);
-
-    float overlap() { return _overlap; }
-    WindowType windowType() { return _window_type; }
-    std::string windowTypeName() { return windowTypeName(_window_type); }
-    static std::string windowTypeName(WindowType);
-    void setWindow(WindowType type, float overlap);
-
+    virtual Signal::pMonoBuffer inverse( pChunk );
 
     void compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction );
 
-
-    /**
-      Different windows are more sutiable for applying the window on the inverse as well.
-      */
-    bool applyWindowOnInverse(WindowType);
-
     static unsigned build_performance_statistics(bool writeOutput = false, float size_of_test_signal_in_seconds = 10);
 
+    Tfr::ComplexBuffer::Ptr inverseKeepComplex( pChunk chunk );
+
 private:
+    const StftParams p;
+    FftImplementation::Ptr fft;
+
     Tfr::pChunk ComputeChunk(DataStorage<float>::Ptr inputbuffer);
 
     /**
       @see compute_redundant()
       */
     Tfr::pChunk ChunkWithRedundant(DataStorage<float>::Ptr inputbuffer);
-    virtual Signal::pBuffer inverseWithRedundant( pChunk );
+    virtual Signal::pMonoBuffer inverseWithRedundant( pChunk );
 
 
     static std::vector<unsigned> _ok_chunk_sizes;
 
-    /**
-        Default window size for the windowed fourier transform, or short-time fourier transform, stft
-        Default value: chunk_size=1<<11
-    */
-    unsigned _window_size;
-    bool _compute_redundant;
-    unsigned _averaging;
-    float _overlap;
-    WindowType _window_type;
 
     /**
       prepareWindow applies the window function to some data, using '_window_type' and '_overlap'.
@@ -158,24 +107,26 @@ private:
       the overlap function exactly on the sample.
       */
     DataStorage<float>::Ptr prepareWindow( DataStorage<float>::Ptr );
-    DataStorage<float>::Ptr reduceWindow( DataStorage<float>::Ptr windowedSignal, const StftChunk* c );
+    template<typename T>
+    typename DataStorage<T>::Ptr reduceWindow( boost::shared_ptr<DataStorage<T> > windowedSignal, const StftChunk* c );
 
-    template<WindowType>
+    template<StftParams::WindowType>
     void prepareWindowKernel( DataStorage<float>::Ptr in, DataStorage<float>::Ptr out );
 
-    template<WindowType>
-    void reduceWindowKernel( DataStorage<float>::Ptr in, DataStorage<float>::Ptr out, const StftChunk* c );
+    template<StftParams::WindowType, typename T>
+    void reduceWindowKernel( boost::shared_ptr<DataStorage<T> > in, typename DataStorage<T>::Ptr out, const StftChunk* c );
 
-    template<WindowType>
+    template<StftParams::WindowType>
     float computeWindowValue( float p );
 };
 
 class StftChunk: public Chunk
 {
 public:
-    StftChunk(unsigned window_size, Stft::WindowType window_type, unsigned increment, bool redundant);
+    StftChunk(unsigned window_size, StftParams::WindowType window_type, unsigned increment, bool redundant);
     void setHalfs( unsigned n );
     unsigned halfs( );
+    // make clear how these are related to the number of data samples in transform_data
     unsigned nActualScales() const;
 
     virtual unsigned nSamples() const;
@@ -185,13 +136,13 @@ public:
     unsigned transformSize() const;
     bool redundant() const { return _redundant; }
     unsigned window_size() const { return _window_size; }
-    Stft::WindowType window_type() const { return _window_type; }
+    StftParams::WindowType window_type() const { return _window_type; }
     unsigned increment() const { return _increment; }
 
     Signal::Interval getCoveredInterval() const;
 
 private:
-    Stft::WindowType _window_type;
+    StftParams::WindowType _window_type;
     unsigned _increment;
 
     unsigned _halfs_n;

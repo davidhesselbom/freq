@@ -5,7 +5,7 @@
 #endif
 
 // OpenGL
-#include <gl.h> // from gpumisc
+#include "gl.h" // from gpumisc
 #ifndef __APPLE__
 #   include <GL/glut.h>
 #else
@@ -25,9 +25,9 @@
 #endif
 
 // gpumisc
-#include <TaskTimer.h>
+#include "TaskTimer.h"
 #ifdef USE_CUDA
-#include <cuda_vector_types_op.h>
+#include "cuda_vector_types_op.h"
 #endif
 
 // Qt

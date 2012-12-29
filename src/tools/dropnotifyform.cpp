@@ -23,7 +23,8 @@ DropNotifyForm::
     QWidget(parent),
     ui(new Ui::DropNotifyForm),
     render_view(render_view),
-    dt(0.01),
+    //dt(0.01), // enable animated dropdown
+    dt(1.0),    // disable animated dropdown
     url("http://muchdifferent.com/?page=signals-cuda")
 {
     ui->setupUi(this);
@@ -49,6 +50,7 @@ DropNotifyForm::
     if (!text.isEmpty())
     {
         ui->labelInfoText->setText(text);
+        ui->labelInfoText->setToolTip(text);
         this->url = url;
     }
     if (!buttontext.isEmpty())
@@ -62,7 +64,7 @@ DropNotifyForm::
     this->setAttribute( Qt::WA_DeleteOnClose );
 
     parentLayout = dynamic_cast<QVBoxLayout*>(parent->layout());
-    BOOST_ASSERT( parentLayout );
+    EXCEPTION_ASSERT( parentLayout );
     parentLayout->insertWidget( 0, this );
     spacing = parentLayout->spacing();
     parentLayout->setSpacing( 0 );
@@ -70,8 +72,15 @@ DropNotifyForm::
     formHeight = height() + spacing;
     setMaximumHeight( 0 );
 
-    connect(&animate, SIGNAL(timeout()), SLOT(ani()));
-    animate.start( 2000 );
+    if (dt<1)
+    {
+        connect(&animate, SIGNAL(timeout()), SLOT(ani()));
+        animate.start( 2000 );
+    }
+    else
+    {
+        ani();
+    }
 }
 
 
@@ -93,13 +102,13 @@ void DropNotifyForm::
 void DropNotifyForm::
         ani()
 {
+    formHeight.TimeStep( 2*dt );
+
     int h = formHeight;
     if (h<spacing)
         parentLayout->setSpacing( h );
     else
         this->setMaximumHeight( h-spacing );
-
-    formHeight.TimeStep( 2*dt );
 
     if (formHeight != &formHeight)
     {

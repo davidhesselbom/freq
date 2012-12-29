@@ -24,9 +24,9 @@ DrawnWaveform::
 
 
 pChunk DrawnWaveform::
-        operator()( Signal::pBuffer b )
+        operator()( Signal::pMonoBuffer b )
 {
-    float blobsize = blob(b->sample_rate);
+    float blobsize = blob(b->sample_rate());
 
     unsigned w = ((unsigned)(b->number_of_samples() / blobsize / drawWaveform_BLOCK_SIZE)) *drawWaveform_BLOCK_SIZE;
 
@@ -48,6 +48,8 @@ pChunk DrawnWaveform::
     if (wmax < w)
         w = wmax;
 
+    updateMaxValue(b);
+
     pChunk c(new DrawnWaveformChunk(this->block_fs));
     c->transform_data.reset( new ChunkData(w, drawWaveform_YRESOLUTION, 1));
 
@@ -60,7 +62,7 @@ pChunk DrawnWaveform::
             readstop = signal_length - b->getInterval().first;
     }
 
-    float writeposoffs = ((b->sample_offset / blobsize) - floorf((b->sample_offset / blobsize).asFloat())).asFloat();
+    float writeposoffs = ((b->sample_offset() / blobsize) - floorf((b->sample_offset() / blobsize).asFloat())).asFloat();
     ::drawWaveform(
             b->waveform_data(),
             c->transform_data,
@@ -71,35 +73,42 @@ pChunk DrawnWaveform::
 
     this->block_fs = 0;
 
-    c->chunk_offset = b->sample_offset / blobsize + writeposoffs;
-    c->freqAxis = freqAxis( b->sample_rate );
+    c->chunk_offset = b->sample_offset() / blobsize + writeposoffs;
+    c->freqAxis = freqAxis( b->sample_rate() );
 
     c->first_valid_sample = 0;
     c->n_valid_samples = c->nSamples();
 
-    c->original_sample_rate = b->sample_rate;
-    c->sample_rate = b->sample_rate / blobsize;
+    c->original_sample_rate = b->sample_rate();
+    c->sample_rate = b->sample_rate() / blobsize;
 
     return c;
 }
 
 
-Signal::pBuffer DrawnWaveform::
+Signal::pMonoBuffer DrawnWaveform::
         inverse( pChunk /*chunk*/ )
 {
     throw std::logic_error("Not implemented");
 }
 
 
+pTransform DrawnWaveform::
+        createTransform() const
+{
+    return pTransform(new DrawnWaveform());
+}
+
+
 float DrawnWaveform::
-        displayedTimeResolution( float FS, float /*hz*/ )
+        displayedTimeResolution( float FS, float /*hz*/ ) const
 {
     return .25f/(FS);
 }
 
 
 FreqAxis DrawnWaveform::
-        freqAxis( float /*FS*/ )
+        freqAxis( float /*FS*/ ) const
 {
     FreqAxis a;
     a.axis_scale = AxisScale_Linear;
@@ -118,7 +127,7 @@ static const unsigned DrawnWaveform_step_constant = 1024;
 
 
 unsigned DrawnWaveform::
-        next_good_size( unsigned current_valid_samples_per_chunk, float /*sample_rate*/ )
+        next_good_size( unsigned current_valid_samples_per_chunk, float /*sample_rate*/ ) const
 {
     if (current_valid_samples_per_chunk<drawWaveform_BLOCK_SIZE)
         return drawWaveform_BLOCK_SIZE;
@@ -128,7 +137,7 @@ unsigned DrawnWaveform::
 
 
 unsigned DrawnWaveform::
-        prev_good_size( unsigned current_valid_samples_per_chunk, float /*sample_rate*/ )
+        prev_good_size( unsigned current_valid_samples_per_chunk, float /*sample_rate*/ ) const
 {
     if (current_valid_samples_per_chunk<2*drawWaveform_BLOCK_SIZE)
         return drawWaveform_BLOCK_SIZE;
@@ -138,11 +147,25 @@ unsigned DrawnWaveform::
 
 
 std::string DrawnWaveform::
-        toString()
+        toString() const
 {
     std::stringstream ss;
     ss << "Tfr::DrawnWaveform, block_fs=" << block_fs << ", maxValue=" << maxValue;
     return ss.str();
+}
+
+
+bool DrawnWaveform::
+        operator==(const TransformParams& b) const
+{
+    const DrawnWaveform* p = dynamic_cast<const DrawnWaveform*>(&b);
+    if (!p)
+        return false;
+
+    return true;
+
+    // 'block_fs', 'signal_length' and 'maxValue' are temporary internal
+    // variables and not transform settings.
 }
 
 
@@ -157,5 +180,17 @@ float DrawnWaveform::
     return b;
 }
 
+
+void DrawnWaveform::
+        updateMaxValue(Signal::pMonoBuffer b)
+{
+    float *p = b->waveform_data()->getCpuMemory();
+    float maxValue=0;
+    Signal::IntervalType N = b->number_of_samples();
+    for(Signal::IntervalType i=0; i<N; ++i)
+        maxValue = std::max(std::abs(p[i]), maxValue);
+    maxValue *= 1.1;
+    this->maxValue = std::max(this->maxValue, maxValue);
+}
 
 } // namespace Tfr
