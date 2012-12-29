@@ -1,5 +1,8 @@
 Debugging tests
 ---------------
+Most tests require Sonic AWE to be loaded as a shared library. To create this library build src.pro with qmake CONFIG+=testlib.
+
+
 It's quite easy to mix libraries built for debug with those built for release. So to debug a test, make sure sonicawe, gpumisc, your test, and sonicawe-end2end/common are built with debug symbols turned on.
 
 
