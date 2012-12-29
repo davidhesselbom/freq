@@ -1,8 +1,6 @@
 #include "fftimplementation.h"
 #include "neat_math.h"
 
-namespace Tfr {
-
 #include "fftooura.h"
 #include "clfft/fftclfft.h"
 #include "clamdfft/fftclamdfft.h"
@@ -12,9 +10,11 @@ namespace Tfr {
 
 using namespace boost;
 
+
 #if defined(USE_CUDA) && !defined(USE_CUFFT)
 #define USE_CUFFT
 #endif
+
 
 namespace Tfr {
 
