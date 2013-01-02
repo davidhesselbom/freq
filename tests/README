@@ -23,7 +23,7 @@ echo $PATH
 
 windows cmd/visual c++
 ----------------------
-PATH=%PATH%;C:\Users\johan\dev\sonicawe\lib\sonicawe-winlib\sonicawe_snapshot_win32_base;C:\Users\johan\dev\sonicawe\src\debug
+PATH=C:\Qt\4.8.4\bin;C:\Users\johan\dev\sonicawe\lib\sonicawe-winlib\sonicawe_snapshot_win32_base;C:\Users\johan\dev\sonicawe\src\debug;%PATH%
 
 
 ubuntu
