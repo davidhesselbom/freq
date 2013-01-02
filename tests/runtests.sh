@@ -101,8 +101,8 @@ if [ "$platform" = "windows" ]; then
     staticlibname(){ echo release/${1}.lib; }
     dynamiclibname(){ echo release/${1}.dll; }
     linkcmd="cp"
-    makecmd='"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe" //verbosity:detailed //p:Configuration=Release $( if [ -f *.sln ]; then echo *.sln; elif [ -f *.vcproj ]; then echo *.vcproj; else echo *.vcxproj; fi )'
-    makeonecmd='"C:\Program Files (x86)\Microsoft Visual Studio 9.0\vc\vcpackages\vcbuild.exe" //logcommands //time $( if [ -f *.vcproj ]; then echo *.vcproj; else echo *.vcxproj; fi ) "Release|Win32"'
+    makecmd='"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe" //verbosity:detailed //p:Configuration=Release $( if ls *.sln > /dev/null; then echo *.sln; elif ls *.vcproj > /dev/null; then echo *.vcproj; else echo *.vcxproj; fi )'
+    makeonecmd='"C:\Program Files (x86)\Microsoft Visual Studio 9.0\vc\vcpackages\vcbuild.exe" //logcommands //time $( if ls *.vcproj > /dev/null; then echo *.vcproj; else echo *.vcxproj; fi ) "Release|Win32"'
 
     # make vcbuild called by msbuild detect changes in headers
     PATH="/c/Program Files (x86)/Microsoft Visual Studio 9.0/Common7/IDE:${PATH}"
