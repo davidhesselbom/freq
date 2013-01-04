@@ -141,7 +141,8 @@ void Hdf5Output::
 {
     VERBOSE_HDF5 TaskTimer tt("Adding buffer '%s'", name.c_str());
 
-    float* p = cb.mergeChannelData ()->getCpuMemory();
+    Signal::pTimeSeriesData d = cb.mergeChannelData ();
+    float* p = d->getCpuMemory();
 
     const unsigned RANK=2;
     hsize_t     dims[RANK]={hsize_t(cb.number_of_channels ()), hsize_t(cb.number_of_samples())};
