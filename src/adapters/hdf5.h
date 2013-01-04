@@ -146,7 +146,7 @@ template<> std::string      Hdf5Input::read_exact<std::string>     ( std::string
   exists. The file is saved with the csv-format comma separated values, but values are
   actually separated by spaces. One row of the csv-file corresponds to one row of the chunk.
 */
-class Hdf5Chunk: public Tfr::CwtFilter
+class SaweDll Hdf5Chunk: public Tfr::CwtFilter
 {
 public:
     Hdf5Chunk(std::string filename="sawe_chunk.h5");
