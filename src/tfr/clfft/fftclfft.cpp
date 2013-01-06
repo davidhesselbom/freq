@@ -36,8 +36,8 @@ void FftClFft::
 {
     TIME_STFT TaskTimer tt("Fft ClFft");
 
-    unsigned n = input->getNumberOfElements().width;
-    unsigned N = output->getNumberOfElements().width;
+    unsigned n = input->numberOfElements();
+    unsigned N = output->numberOfElements();
 
     if (-1 != direction)
         EXCEPTION_ASSERT( n == N );
