@@ -2,8 +2,13 @@
 #include "neat_math.h"
 
 #include "fftooura.h"
-#include "clfft/fftclfft.h"
+#if defined(USE_OPENCL)
+#if defined(USE_AMD)
 #include "clamdfft/fftclamdfft.h"
+#else
+#include "clfft/fftclfft.h"
+#endif
+#endif
 #include "fftcufft.h"
 
 #include <boost/make_shared.hpp>
@@ -23,10 +28,12 @@ shared_ptr<FftImplementation> FftImplementation::
 {
 #ifdef USE_CUFFT
     return make_shared<FftCufft>(); // Gpu, Cuda
-#elif defined(USE_AMDFFT)
-    return make_shared<FftClAmdFft>(); // Gpu, OpenCL
 #elif defined(USE_OPENCL)
+	#if defined(USE_AMD)
+    return make_shared<FftClAmdFft>(); // Gpu, OpenCL
+	#else
     return make_shared<FftClFft>(); // Gpu, OpenCL
+	#endif
 #else
     return make_shared<FftOoura>(); // Cpu
 #endif

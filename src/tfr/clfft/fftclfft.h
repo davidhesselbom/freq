@@ -4,7 +4,7 @@
 #include "tfr/fftimplementation.h"
 
 namespace Tfr {
-    class FftClFft: public FftImplementation {
+    class SaweDll FftClFft: public FftImplementation {
     public:
         void compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction );
         void computeR2C( DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output );

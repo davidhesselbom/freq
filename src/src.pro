@@ -178,12 +178,14 @@ CONFIG += $${qtfeatures}tmpdir
 # #######################################################################
 # OpenCL
 # #######################################################################
-useopencl {
-    SOURCES += \
-        tfr/clfft/*.cpp
+useopenclamdapple {
+	CONFIG += useopencl
+}
+useopenclamdamd {
+	CONFIG += useopencl
+}
 
-    HEADERS += \
-        tfr/clfft/*.h
+useopencl {
 
     CONFIG += $${qtfeatures}opencl
 }

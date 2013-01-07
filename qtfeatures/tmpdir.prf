@@ -1,7 +1,9 @@
 usecuda {
   TMPDIR = $$TMPDIR/cuda
-} else:useopencl {
-  TMPDIR = $$TMPDIR/opencl
+} else:useopenclamdapple {
+  TMPDIR = $$TMPDIR/opencl/amdapple
+} else:useopenclamdamd {
+  TMPDIR = $$TMPDIR/opencl/amdamd
 } else {
   TMPDIR = $$TMPDIR/cpu
 }

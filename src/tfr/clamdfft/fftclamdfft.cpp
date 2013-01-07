@@ -98,8 +98,8 @@ void FftClAmdFft:: // Once
 {
     TIME_STFT TaskTimer tt("Fft AmdClFft");
 
-    unsigned n = input->getNumberOfElements().width;
-    unsigned N = output->getNumberOfElements().width;
+    unsigned n = input->numberOfElements();
+    unsigned N = output->numberOfElements();
 
     if (-1 != direction)
         BOOST_ASSERT( n == N );
@@ -494,7 +494,7 @@ unsigned FftClAmdFft::
         sChunkSizeG(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
-    //return spo2g(x);
+    return spo2g(x);
 
     multiple = std::max(1u, multiple);
     BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));

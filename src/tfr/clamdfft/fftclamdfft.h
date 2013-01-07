@@ -10,7 +10,7 @@
 typedef size_t clAmdFftPlanHandle;
 
 namespace Tfr {
-    class FftClAmdFft: public FftImplementation {
+    class SaweDll FftClAmdFft: public FftImplementation {
     public:
         FftClAmdFft();
         ~FftClAmdFft();
