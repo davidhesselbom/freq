@@ -494,8 +494,9 @@ unsigned FftClAmdFft::
         sChunkSizeG(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
+#if defined(ONLYPOWERSOF2)
     return spo2g(x);
-
+#endif
     multiple = std::max(1u, multiple);
     BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
 
