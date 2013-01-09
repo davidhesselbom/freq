@@ -120,7 +120,7 @@ private:
     float computeWindowValue( float p );
 };
 
-class StftChunk: public Chunk
+class SaweDll StftChunk: public Chunk
 {
 public:
     StftChunk(unsigned window_size, StftParams::WindowType window_type, unsigned increment, bool redundant);
