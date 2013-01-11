@@ -15,6 +15,10 @@ namespace Tfr {
         FftClAmdFft();
         ~FftClAmdFft();
 
+		void die();
+		void setup();
+		void reset();
+
         void compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, FftDirection direction );
         void computeR2C( DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output );
         void computeC2R( Tfr::ChunkData::Ptr input, DataStorage<float>::Ptr output );

@@ -25,7 +25,7 @@ namespace Tfr {
 
 FftClAmdFft::FftClAmdFft()
 {
-    std::auto_ptr< clAmdFftSetupData > setupData( new clAmdFftSetupData );
+	std::auto_ptr< clAmdFftSetupData > setupData( new clAmdFftSetupData );
     clAmdFftStatus error = clAmdFftInitSetupData( setupData.get( ) );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not init setupdata for clAmdFFT.");
@@ -44,6 +44,35 @@ FftClAmdFft::~FftClAmdFft()
     clAmdFftStatus error = clAmdFftTeardown( );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not tear down clAmdFFT.");
+}
+
+void FftClAmdFft::setup()
+{
+	std::auto_ptr< clAmdFftSetupData > setupData( new clAmdFftSetupData );
+    clAmdFftStatus error = clAmdFftInitSetupData( setupData.get( ) );
+    if (error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not init setupdata for clAmdFFT.");
+
+    // Dump kernels to file; useless if they can't be loaded anyway
+    //setupData->debugFlags	|= CLFFT_DUMP_PROGRAMS;
+
+    error = clAmdFftSetup( setupData.get( ) );
+    if (error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not setup clAmdFFT.");
+}
+
+void FftClAmdFft::die()
+{
+	TaskInfo ti("Doing clAmdFftTeardown");
+    clAmdFftStatus error = clAmdFftTeardown( );
+    if (error != CLFFT_SUCCESS)
+        throw std::runtime_error("Could not tear down clAmdFFT.");
+}
+
+void FftClAmdFft::reset()
+{
+	die();
+	setup();
 }
 
 void FftClAmdFft::clearPlans()
@@ -138,6 +167,7 @@ void FftClAmdFft:: // Once
 		{
 			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+			bakeTime = tt5.elapsedTime();
             clFinish(opencl->getCommandQueue());
 		}
 
@@ -202,6 +232,7 @@ void FftClAmdFft:: // Once
             throw std::runtime_error("Bad stuff happened during FFT computation.");
 
         clFinish(opencl->getCommandQueue());
+		clReleaseMemObject(clTempBuffer);
     }
 }
 
@@ -269,6 +300,7 @@ void FftClAmdFft::
 void FftClAmdFft:: //Batch
         compute( Tfr::ChunkData::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n, FftDirection direction )
 {    
+	throw std::runtime_error("Wrong compute method called!");
     /*
 	TIME_STFT TaskTimer tt2("Fft AmdClFft");
 
@@ -345,6 +377,7 @@ void FftClAmdFft:: //Batch
 void FftClAmdFft:: //R2C
         compute(DataStorage<float>::Ptr input, Tfr::ChunkData::Ptr output, DataStorageSize n )
 {
+	throw std::runtime_error("Wrong compute method called!");
 	/*
     unsigned denseWidth = n.width/2+1;
 
