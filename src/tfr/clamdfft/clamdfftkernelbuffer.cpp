@@ -33,19 +33,24 @@ void CLAMDFFTKernelBuffer::clearPlans(OpenCLContext* c)
 
 clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int n, clAmdFftStatus& error)
 {
+	//clearPlans(c);
 	TaskInfo("%s n=%u", __FUNCTION__, n);
 	size_t clLengths[] = { n, 1, 1 };
 
 	if (kernel != NULL)
 	{
+		TaskInfo("Setting plan length in kernelbuffer");
         error = clAmdFftSetPlanLength(kernel, CLFFT_1D, clLengths);
 		if (error == CLFFT_SUCCESS)
 			return kernel;
+		else
+			return NULL;
 	}
 
     if (kernels.find(n) != kernels.end())
     {
         error = CLFFT_SUCCESS;
+		TaskInfo("Found kernel, error: %s", error);
         return kernels[n];
 	}
 
@@ -77,7 +82,7 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     error = clAmdFftSetPlanScale(plan, CLFFT_FORWARD, 1);
     error = clAmdFftSetPlanScale(plan, CLFFT_BACKWARD, 1.0f/n);
 	*/
-#if !defined(FFTINPLACE)
+#if !defined(FFTOUTOFPLACE)
     error = clAmdFftSetResultLocation(plan, CLFFT_OUTOFPLACE);
 #endif
 	/*
