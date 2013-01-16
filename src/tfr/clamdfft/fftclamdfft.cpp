@@ -38,6 +38,7 @@ FftClAmdFft::FftClAmdFft()
     error = clAmdFftSetup( setupData.get( ) );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not setup clAmdFFT.");
+	batchSize = 1;
 }
 
 FftClAmdFft::~FftClAmdFft()
@@ -118,10 +119,7 @@ void FftClAmdFft::setSize(size_t newSize)
 
 void FftClAmdFft::setBatchSize(size_t newBatchSize)
 {
-	clAmdFftStatus clamdfft_error;
-	clamdfft_error = clAmdFftSetPlanBatchSize(lastPlan, newBatchSize);
-	if (clamdfft_error != CLFFT_SUCCESS)
-       throw std::runtime_error("Could not set clAmdFFT plan batch size.");
+	batchSize = newBatchSize;
 }
 
 void FftClAmdFft:: // Once
@@ -129,8 +127,8 @@ void FftClAmdFft:: // Once
 {
     TIME_STFT TaskTimer tt("Fft AmdClFft");
 
-    unsigned n = input->numberOfElements();
-    unsigned N = output->numberOfElements();
+    unsigned n = input->numberOfElements() / batchSize;
+    unsigned N = output->numberOfElements() / batchSize;
 
     if (-1 != direction)
         BOOST_ASSERT( n == N );
@@ -162,12 +160,14 @@ void FftClAmdFft:: // Once
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
-        //if (clAmdFftGetPlanBatchSize(plan) != 1)
-        //{
-        //    clAmdFftSetPlanBatchSize(plan, 1);
-        //}
+		size_t currentBatchSize;
+		clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
+        if (currentBatchSize != batchSize)
+        {
+            clAmdFftSetPlanBatchSize(plan, batchSize);
+        }
 		{
-			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
+			TIME_STFT TaskTimer tt5("Baking plan for batch %d", batchSize);
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
 			bakeTime = tt5.elapsedTime();
             clFinish(opencl->getCommandQueue());

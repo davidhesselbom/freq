@@ -40,6 +40,7 @@ namespace Tfr {
 		
 		void setSize(size_t newSize);
 		void setBatchSize(size_t newBatchSize);
+		int batchSize;
 		void bake();
 
 		void clearPlans();
