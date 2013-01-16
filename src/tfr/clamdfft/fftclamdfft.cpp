@@ -20,6 +20,8 @@
 #define TIME_STFT
 //#define TIME_STFT if(0)
 
+#define ONLYPOWERSOF2
+
 
 namespace Tfr {
 
@@ -165,10 +167,10 @@ void FftClAmdFft:: // Once
         //    clAmdFftSetPlanBatchSize(plan, 1);
         //}
 		{
-			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
-			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
-			bakeTime = tt5.elapsedTime();
-            clFinish(opencl->getCommandQueue());
+			//TIME_STFT TaskTimer tt5("Baking plan for batch 1");
+			//clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+			//bakeTime = tt5.elapsedTime();
+            //clFinish(opencl->getCommandQueue());
 		}
 
 		size_t tempBufferSize = 0;
@@ -207,11 +209,6 @@ void FftClAmdFft:: // Once
 				 sizeof(cl_ulong), &endTime, NULL);
 
             kernelExecTime = endTime-startTime;
-			std::string tempString;
-			std::stringstream ss;
-			ss << kernelExecTime;
-			ss >> tempString;
-			execTimes.push_back(tempString);
         }
 		
 		//clamdfft_error = clAmdFftDestroyPlan(&plan);
@@ -231,8 +228,8 @@ void FftClAmdFft:: // Once
         if (clamdfft_error != CLFFT_SUCCESS)
             throw std::runtime_error("Bad stuff happened during FFT computation.");
 
-        clFinish(opencl->getCommandQueue());
-		clReleaseMemObject(clTempBuffer);
+        //clFinish(opencl->getCommandQueue());
+		//clReleaseMemObject(clTempBuffer);
     }
 }
 

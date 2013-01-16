@@ -33,6 +33,12 @@ void CLAMDFFTKernelBuffer::clearPlans(OpenCLContext* c)
 
 clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int n, clAmdFftStatus& error)
 {
+	if (kernels.find(n) != kernels.end())
+    {
+        error = CLFFT_SUCCESS;
+        return kernels[n];
+	}
+
 	//clearPlans(c);
 	TaskInfo("%s n=%u", __FUNCTION__, n);
 	size_t clLengths[] = { n, 1, 1 };
