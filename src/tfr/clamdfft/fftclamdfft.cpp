@@ -20,7 +20,7 @@
 #define TIME_STFT
 //#define TIME_STFT if(0)
 
-#define ONLYPOWERSOF2
+//#define ONLYPOWERSOF2
 
 
 namespace Tfr {
@@ -167,10 +167,10 @@ void FftClAmdFft:: // Once
         //    clAmdFftSetPlanBatchSize(plan, 1);
         //}
 		{
-			//TIME_STFT TaskTimer tt5("Baking plan for batch 1");
-			//clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
-			//bakeTime = tt5.elapsedTime();
-            //clFinish(opencl->getCommandQueue());
+			TIME_STFT TaskTimer tt5("Baking plan for batch 1");
+			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
+			bakeTime = tt5.elapsedTime();
+            clFinish(opencl->getCommandQueue());
 		}
 
 		size_t tempBufferSize = 0;
