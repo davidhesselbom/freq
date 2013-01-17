@@ -41,32 +41,25 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
         return kernels[n];
 	}
 
-	//clearPlans(c);
 	TIME_STFT TaskInfo("%s n=%u", __FUNCTION__, n);
 	size_t clLengths[] = { n, 1, 1 };
 
-	if (kernel != NULL)
-	{
-		TIME_STFT TaskInfo("Setting plan length in kernelbuffer");
-        error = clAmdFftSetPlanLength(kernel, CLFFT_1D, clLengths);
-		if (error == CLFFT_SUCCESS)
-			return kernel;
-		else
-			return NULL;
-	}
+    TIME_STFT TaskTimer tt("Creating an OpenCL FFT compute plan for n=%u", n);
 
-    if (kernels.find(n) != kernels.end())
-    {
-        error = CLFFT_SUCCESS;
-		TIME_STFT TaskInfo("Found kernel, error: %s", error);
-        return kernels[n];
-	}
+    clAmdFftPlanHandle plan;
 
+    error = clAmdFftCreateDefaultPlan(&plan, c->getContext(), CLFFT_1D, clLengths);
 
+    if (error == CL_SUCCESS)
+        kernels[n] = plan;
+
+	return plan;
+
+/*
 
     //clFFT_Dim3 ndim = { n, 1, 1 };
     //clFFT_Plan plan = clFFT_CreatePlan(c, ndim, clFFT_1D, clFFT_InterleavedComplexFormat, &error);
-    clAmdFftPlanHandle plan;
+
 
 #ifdef COPY_EXISTING_PLAN
     if (n != 1024)
@@ -89,7 +82,7 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     error = clAmdFftSetPlanPrecision(plan, CLFFT_SINGLE); //CLFFT_SINGLE_FAST not yet supported
     error = clAmdFftSetPlanScale(plan, CLFFT_FORWARD, 1);
     error = clAmdFftSetPlanScale(plan, CLFFT_BACKWARD, 1.0f/n);
-	*/
+	
 #if !defined(FFTOUTOFPLACE)
     //error = clAmdFftSetResultLocation(plan, CLFFT_OUTOFPLACE);
 #endif
@@ -97,14 +90,15 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     error = clAmdFftSetLayout(plan, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
     error = clAmdFftSetPlanInStride(plan, CLFFT_1D, clLengths);
     error = clAmdFftSetPlanOutStride(plan, CLFFT_1D, clLengths);
-*/
-    
 
+    
     if (error == CLFFT_SUCCESS)
         //kernel = plan;
 		kernels[n] = plan;
+	else
+
 
     //error = clAmdFftBakePlan(plan, 1, &c->getCommandQueue(), NULL, NULL);
 
-	return plan;
+	return plan;*/
 }
