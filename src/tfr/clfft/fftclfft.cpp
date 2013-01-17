@@ -46,9 +46,14 @@ void FftClFft::
         OpenCLContext *opencl = &OpenCLContext::Singleton();
         cl_int fft_error;
 
+		try {
         clFFT_Plan plan = CLFFTKernelBuffer::Singleton().getPlan(opencl->getContext(), n, fft_error);
+		} catch {
+
+		}
         if (fft_error != CL_SUCCESS)
-            throw std::runtime_error("Could not create clFFT compute plan.");
+			cout << fft_error << endl;
+            throw std::runtime_error("Could not create clFFT compute plan!!!11!one", fft_error);
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };

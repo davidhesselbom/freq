@@ -17,6 +17,7 @@
 #include "clamdfftkernelbuffer.h"
 
 #include "clAmdFft.h"
+#include "clAmdFft.openCL.h"
 
 #define TIME_STFT if(0)
 
@@ -97,7 +98,7 @@ void FftClAmdFft::createPlan(size_t newSize)
 
     clAmdFftPlanHandle plan = CLAMDFFTKernelBuffer::Singleton().getPlan(opencl, newSize, clamdfft_error);
     if (clamdfft_error != CLFFT_SUCCESS)
-        throw std::runtime_error("Could not create clAmdFFT compute plan.");
+        throw std::runtime_error("Could not create clAmdFFT compute plan CREATE.");
 	lastPlan = plan;
 }
 
@@ -108,7 +109,7 @@ void FftClAmdFft::bake()
 	clAmdFftStatus clamdfft_error;
 	clamdfft_error = clAmdFftBakePlan(lastPlan, 1, &opencl->getCommandQueue(), NULL, NULL);
 	if (clamdfft_error != CLFFT_SUCCESS)
-        throw std::runtime_error("Could not create clAmdFFT compute plan.");
+        throw std::runtime_error("Could not create clAmdFFT compute plan BAKE.");
 //TIME_STFT bakeTime = tt5.elapsedTime();
 }
 
@@ -138,6 +139,7 @@ void FftClAmdFft:: // Once
         BOOST_ASSERT( n == N );
 
     {
+
         clAmdFftDirection dir = ((direction == FftDirection_Forward) ? CLFFT_FORWARD : CLFFT_BACKWARD);
 
         TIME_STFT TaskTimer tt("Computing fft(N=%u, n=%u, direction=%d)", N, n, direction);
@@ -149,7 +151,11 @@ void FftClAmdFft:: // Once
         clAmdFftPlanHandle plan = CLAMDFFTKernelBuffer::Singleton().getPlan(opencl, n, clamdfft_error);
         //if (fft_error != CL_SUCCESS)
         if (clamdfft_error != CLFFT_SUCCESS)
-            throw std::runtime_error("Could not create clAmdFFT compute plan.");
+		{
+			throw std::runtime_error("Aaarghhh!");					
+            //throw std::runtime_error(prettyPrintclFFTStatus(clamdfft_error));
+
+		}
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
 		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
