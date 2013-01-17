@@ -2,6 +2,8 @@
 
 #include "TaskTimer.h"
 
+#define TIME_STFT if(0)
+
 
 CLAMDFFTKernelBuffer::CLAMDFFTKernelBuffer()
 {
@@ -40,12 +42,12 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
 	}
 
 	//clearPlans(c);
-	TaskInfo("%s n=%u", __FUNCTION__, n);
+	TIME_STFT TaskInfo("%s n=%u", __FUNCTION__, n);
 	size_t clLengths[] = { n, 1, 1 };
 
 	if (kernel != NULL)
 	{
-		TaskInfo("Setting plan length in kernelbuffer");
+		TIME_STFT TaskInfo("Setting plan length in kernelbuffer");
         error = clAmdFftSetPlanLength(kernel, CLFFT_1D, clLengths);
 		if (error == CLFFT_SUCCESS)
 			return kernel;
@@ -56,7 +58,7 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     if (kernels.find(n) != kernels.end())
     {
         error = CLFFT_SUCCESS;
-		TaskInfo("Found kernel, error: %s", error);
+		TIME_STFT TaskInfo("Found kernel, error: %s", error);
         return kernels[n];
 	}
 
@@ -75,7 +77,7 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     }
     else
 #endif
-    {
+    
         //TaskTimer tt("Creating an OpenCL AMD FFT compute plan for n=%u", n);
         error = clAmdFftCreateDefaultPlan(&plan, c->getContext(), CLFFT_1D, clLengths);
         //Default: Batch Size 1, single precision, scaling 1.0 forward, 1.0 / P backward,
@@ -89,14 +91,14 @@ clAmdFftPlanHandle CLAMDFFTKernelBuffer::getPlan(OpenCLContext* c, unsigned int 
     error = clAmdFftSetPlanScale(plan, CLFFT_BACKWARD, 1.0f/n);
 	*/
 #if !defined(FFTOUTOFPLACE)
-    error = clAmdFftSetResultLocation(plan, CLFFT_OUTOFPLACE);
+    //error = clAmdFftSetResultLocation(plan, CLFFT_OUTOFPLACE);
 #endif
 	/*
     error = clAmdFftSetLayout(plan, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);
     error = clAmdFftSetPlanInStride(plan, CLFFT_1D, clLengths);
     error = clAmdFftSetPlanOutStride(plan, CLFFT_1D, clLengths);
 */
-    }
+    
 
     if (error == CLFFT_SUCCESS)
         //kernel = plan;

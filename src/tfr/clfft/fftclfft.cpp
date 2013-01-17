@@ -15,7 +15,6 @@
 
 #include "fftclfft.h"
 
-//#define TIME_STFT
 #define TIME_STFT if(0)
 
 
@@ -52,7 +51,7 @@ void FftClFft::
             throw std::runtime_error("Could not create clFFT compute plan.");
 
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
-		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
         // Run the fft in OpenCL :)
         // fft kernel needs to have read/write access to output data
@@ -66,7 +65,7 @@ void FftClFft::
                 opencl->getCommandQueue(),
                 plan, 1, (clFFT_Direction)direction,
 				clMemBuffersIn[0],
-				clMemBuffersOut[0],
+				NULL, //clMemBuffersOut[0],
 				0, NULL, &outEvent );
 
 			clFinish(opencl->getCommandQueue());

@@ -11,17 +11,21 @@
 #include "openclcontext.h"
 #include "cpumemorystorage.h"
 #include "openclmemorystorage.h"
-#include "TaskTimer.h"
+//#include "TaskTimer.h"
+#include "tools/support/timer.h"
 #include "computationkernel.h"
 #include "clamdfftkernelbuffer.h"
 
 #include "clAmdFft.h"
 
-#define TIME_STFT
-//#define TIME_STFT if(0)
+#define TIME_STFT if(0)
 
-//#define ONLYPOWERSOF2
+#define TIMER
+//#define TIMER if(0)
 
+#define ONLYPOWERSOF2
+
+using Tools::Support::Timer;
 
 namespace Tfr {
 
@@ -43,7 +47,7 @@ FftClAmdFft::FftClAmdFft()
 
 FftClAmdFft::~FftClAmdFft()
 {
-	TaskInfo ti("Doing clAmdFftTeardown");
+	TIME_STFT TaskInfo ti("Doing clAmdFftTeardown");
     clAmdFftStatus error = clAmdFftTeardown( );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not tear down clAmdFFT.");
@@ -66,7 +70,7 @@ void FftClAmdFft::setup()
 
 void FftClAmdFft::die()
 {
-	TaskInfo ti("Doing clAmdFftTeardown");
+	TIME_STFT TaskInfo ti("Doing clAmdFftTeardown");
     clAmdFftStatus error = clAmdFftTeardown( );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not tear down clAmdFFT.");
@@ -105,7 +109,7 @@ void FftClAmdFft::bake()
 	clamdfft_error = clAmdFftBakePlan(lastPlan, 1, &opencl->getCommandQueue(), NULL, NULL);
 	if (clamdfft_error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not create clAmdFFT compute plan.");
-	bakeTime = tt5.elapsedTime();
+//TIME_STFT bakeTime = tt5.elapsedTime();
 }
 
 void FftClAmdFft::setSize(size_t newSize)
@@ -147,18 +151,8 @@ void FftClAmdFft:: // Once
         if (clamdfft_error != CLFFT_SUCCESS)
             throw std::runtime_error("Could not create clAmdFFT compute plan.");
 
-        // Run the fft in OpenCL :)
-        // fft kernel needs to have read/write access to output data
-
-        // clAmdFft client code:
-        /*
-        OPENCL_V_THROW( clAmdFftEnqueueTransform( plHandle, CLFFT_FORWARD, 1, &queue, 0, NULL, &outEvent,
-                                                  &clMemBuffersIn[ 0 ], BuffersOut, clMedBuffer ),
-                       "clAmdFftEnqueueTransform failed" );
-        */
-
 		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
-		cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
 
 		size_t currentBatchSize;
 		clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
@@ -167,21 +161,30 @@ void FftClAmdFft:: // Once
             clAmdFftSetPlanBatchSize(plan, batchSize);
         }
 		{
-			TIME_STFT TaskTimer tt5("Baking plan for batch %d", batchSize);
+			Timer tt6;
+			//TIME_STFT TaskTimer tt5("Baking plan for batch %d", batchSize);
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
-			bakeTime = tt5.elapsedTime();
-            clFinish(opencl->getCommandQueue());
+			//TIME_STFT bakeTime = tt5.elapsedTime();
+			bakeTime = tt6.elapsed();
+            //clFinish(opencl->getCommandQueue());
+		}
+
+		clAmdFftResultLocation loc;
+		clAmdFftGetResultLocation (plan, &loc);
+		if (loc != CLFFT_INPLACE)
+		{
+			throw std::runtime_error("Placeness Panic!!!");
 		}
 
 		size_t tempBufferSize = 0;
 		clAmdFftGetTmpBufSize(plan, &tempBufferSize);
 		tempBufferSize /= 8;
-		std::cout << "tempbuf: " << tempBufferSize << std::endl;
+		//std::cout << "tempbuf: " << tempBufferSize << std::endl;
 		ChunkData::Ptr tempBuffer(new ChunkData(tempBufferSize));
 		cl_mem clTempBuffer = NULL;
 		if (tempBufferSize != 0)
 		{
-			clTempBuffer = OpenClMemoryStorage::ReadWrite<1>(tempBuffer).ptr();
+			clTempBuffer = OpenClMemoryStorage::WriteAll<1>(tempBuffer).ptr();
 		}
 
 		
@@ -193,13 +196,8 @@ void FftClAmdFft:: // Once
             clamdfft_error = clAmdFftEnqueueTransform(
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
 				&clMemBuffersIn[0],
-				&clMemBuffersOut[0],
+				NULL, //&clMemBuffersOut[0],
                 clTempBuffer );
-            //clamdfft_error = clAmdFftEnqueueTransform(
-            //    plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
-			//	&clMemBuffersIn[0],
-			//	&clMemBuffersOut[0],
-            //    NULL );
             clFinish(opencl->getCommandQueue());
 
 			clGetEventProfilingInfo(outEvent, CL_PROFILING_COMMAND_START, 
