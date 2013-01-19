@@ -24,7 +24,7 @@
 #define TIMER
 //#define TIMER if(0)
 
-#define ONLYPOWERSOF2
+//#define ONLYPOWERSOF2
 
 using Tools::Support::Timer;
 
@@ -72,6 +72,7 @@ void FftClAmdFft::setup()
 void FftClAmdFft::die()
 {
 	TIME_STFT TaskInfo ti("Doing clAmdFftTeardown");
+	clearPlans();
     clAmdFftStatus error = clAmdFftTeardown( );
     if (error != CLFFT_SUCCESS)
         throw std::runtime_error("Could not tear down clAmdFFT.");
@@ -157,8 +158,18 @@ void FftClAmdFft:: // Once
 
 		}
 
-		cl_mem clMemBuffersIn [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( input ).ptr() };
+		cl_mem clMemBuffersIn = NULL;		
+
+		try {
+		clMemBuffersIn = OpenClMemoryStorage::ReadWrite<1>( input ).ptr();
 		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
+		}
+		catch( std::exception& e )
+		{
+			char error[100];
+			sprintf(error, "Allocating clMemBuffersIn:\n%s", e.what());
+			throw std::runtime_error(error);
+		}
 
 		size_t currentBatchSize;
 		clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
@@ -184,13 +195,25 @@ void FftClAmdFft:: // Once
 
 		size_t tempBufferSize = 0;
 		clAmdFftGetTmpBufSize(plan, &tempBufferSize);
+//		if (tempBufferSize % 8 != 0)
+//			tempBufferSize += 8 - (tempBufferSize % 8)
+		size_t tempBufferSizeOrig = tempBufferSize;
 		tempBufferSize /= 8;
+		tempBufferSize += 8;
 		//std::cout << "tempbuf: " << tempBufferSize << std::endl;
 		ChunkData::Ptr tempBuffer(new ChunkData(tempBufferSize));
 		cl_mem clTempBuffer = NULL;
 		if (tempBufferSize != 0)
 		{
-			clTempBuffer = OpenClMemoryStorage::WriteAll<1>(tempBuffer).ptr();
+			try {
+			clTempBuffer = OpenClMemoryStorage::ReadWrite<1>(tempBuffer).ptr();
+			}
+			catch( std::exception& e )
+			{
+				char error[100];
+				sprintf(error, "Allocating clTempBuffer: %i (orig %i):\n%s", tempBufferSize, tempBufferSizeOrig, e.what());
+				throw error;
+			}
 		}
 
 		
@@ -201,7 +224,7 @@ void FftClAmdFft:: // Once
             TIME_STFT TaskTimer tt5("Running clAmdFft for (n=%u)", n);
             clamdfft_error = clAmdFftEnqueueTransform(
                 plan, dir, 1, &opencl->getCommandQueue(), 0, NULL, &outEvent,
-				&clMemBuffersIn[0],
+				&clMemBuffersIn,
 				NULL, //&clMemBuffersOut[0],
                 clTempBuffer );
             clFinish(opencl->getCommandQueue());
@@ -510,7 +533,9 @@ unsigned FftClAmdFft::
         lChunkSizeS(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
-    //return lpo2s(x);
+#ifdef ONLYPOWERSOF2
+   return lpo2s(x);
+#endif
 
     multiple = std::max(1u, multiple);
     BOOST_ASSERT( spo2g(multiple-1) == lpo2s(multiple+1));
@@ -528,7 +553,7 @@ unsigned FftClAmdFft::
         sChunkSizeG(unsigned x, unsigned multiple)
 {
     // It's faster but less flexible to only accept powers of 2
-#if defined(ONLYPOWERSOF2)
+#ifdef ONLYPOWERSOF2
     return spo2g(x);
 #endif
     multiple = std::max(1u, multiple);
