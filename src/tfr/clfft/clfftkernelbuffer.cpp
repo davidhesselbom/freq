@@ -2,6 +2,7 @@
 
 #include "TaskTimer.h"
 
+#define TIME_STFT if(0)
 
 CLFFTKernelBuffer::CLFFTKernelBuffer()
 {
@@ -26,7 +27,7 @@ clFFT_Plan CLFFTKernelBuffer::getPlan(cl_context c, unsigned int n, cl_int& erro
         return kernels[n];
 	}
 
-    TaskTimer tt("Creating an OpenCL FFT compute plan for n=%u", n);
+    TIME_STFT TaskTimer tt("Creating an OpenCL FFT compute plan for n=%u", n);
 
     clFFT_Dim3 ndim = { n, 1, 1 };
     clFFT_Plan plan = clFFT_CreatePlan(c, ndim, clFFT_1D, clFFT_InterleavedComplexFormat, &error);
