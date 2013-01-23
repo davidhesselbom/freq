@@ -197,21 +197,48 @@ void FftClAmdFft:: // Once
 		clAmdFftGetTmpBufSize(plan, &tempBufferSize);
 //		if (tempBufferSize % 8 != 0)
 //			tempBufferSize += 8 - (tempBufferSize % 8)
-		size_t tempBufferSizeOrig = tempBufferSize;
-		tempBufferSize /= 8;
-		tempBufferSize += 8;
+		//size_t tempBufferSizeOrig = tempBufferSize;
+		//tempBufferSize /= 8;
+		//tempBufferSize += 1;
 		//std::cout << "tempbuf: " << tempBufferSize << std::endl;
-		ChunkData::Ptr tempBuffer(new ChunkData(tempBufferSize));
+		//ChunkData::Ptr tempBuffer(new ChunkData(tempBufferSize));
 		cl_mem clTempBuffer = NULL;
+		cl_int cl_error;
 		if (tempBufferSize != 0)
 		{
-			try {
-			clTempBuffer = OpenClMemoryStorage::ReadWrite<1>(tempBuffer).ptr();
+			try 
+			{
+				clTempBuffer = clCreateBuffer ( opencl->getContext(), CL_MEM_READ_WRITE, tempBufferSize, 0, &cl_error);
+				//clTempBuffer = OpenClMemoryStorage::ReadWrite<1>(tempBuffer).ptr();
+				if(clamdfft_error != CL_SUCCESS)
+				{
+					//throw std::runtime_error("Could not write to OpenCL memory");
+					switch (clamdfft_error)
+					{
+						case CL_INVALID_CONTEXT:
+							throw std::runtime_error("CL_INVALID_CONTEXT");
+						case CL_INVALID_VALUE:
+							throw std::runtime_error("CL_INVALID_VALUE");
+						case CL_INVALID_BUFFER_SIZE:
+							throw std::runtime_error("CL_INVALID_BUFFER_SIZE");
+						case CL_INVALID_HOST_PTR:
+							throw std::runtime_error("CL_INVALID_HOST_PTR");
+						case CL_MEM_OBJECT_ALLOCATION_FAILURE:
+							throw std::runtime_error("CL_MEM_OBJECT_ALLOCATION_FAILURE");
+						case CL_OUT_OF_RESOURCES:
+							throw std::runtime_error("CL_OUT_OF_RESOURCES");
+						case CL_OUT_OF_HOST_MEMORY:
+							throw std::runtime_error("CL_OUT_OF_HOST_MEMORY");
+						default:
+							throw std::runtime_error("Could not write to OpenCL memory");
+						break;
+					}
+				}
 			}
 			catch( std::exception& e )
 			{
 				char error[100];
-				sprintf(error, "Allocating clTempBuffer: %i (orig %i):\n%s", tempBufferSize, tempBufferSizeOrig, e.what());
+				sprintf(error, "Allocating clTempBuffer: %i:\n%s", tempBufferSize, e.what());
 				throw error;
 			}
 		}
@@ -237,26 +264,13 @@ void FftClAmdFft:: // Once
 
             kernelExecTime = endTime-startTime;
         }
-		
-		//clamdfft_error = clAmdFftDestroyPlan(&plan);
-
-        // old clFFT code:
-
-        /*
-        fft_error |= clFFT_ExecuteInterleaved(
-                opencl->getCommandQueue(),
-                plan, 1, (clFFT_Direction)direction,
-                OpenClMemoryStorage::ReadOnly<1>( input ).ptr(),
-                OpenClMemoryStorage::ReadWrite<1>( output ).ptr(),
-                0, NULL, NULL );
-        */
 
         //if (fft_error != CL_SUCCESS)
         if (clamdfft_error != CLFFT_SUCCESS)
             throw std::runtime_error("Bad stuff happened during FFT computation.");
 
         //clFinish(opencl->getCommandQueue());
-		//clReleaseMemObject(clTempBuffer);
+		clReleaseMemObject(clTempBuffer);
     }
 }
 
