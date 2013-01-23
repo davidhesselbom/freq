@@ -160,38 +160,43 @@ void FftClAmdFft:: // Once
 
 		cl_mem clMemBuffersIn = NULL;		
 
-		try {
+//		try {
 		clMemBuffersIn = OpenClMemoryStorage::ReadWrite<1>( input ).ptr();
 		//cl_mem clMemBuffersOut [ 1 ] = { OpenClMemoryStorage::ReadWrite<1>( output ).ptr() };
-		}
-		catch( std::exception& e )
+//		}
+/*		catch( std::exception& e )
 		{
 			char error[100];
 			sprintf(error, "Allocating clMemBuffersIn:\n%s", e.what());
 			throw std::runtime_error(error);
 		}
-
+*/
+		/*
 		size_t currentBatchSize;
 		clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
         if (currentBatchSize != batchSize)
         {
             clAmdFftSetPlanBatchSize(plan, batchSize);
         }
-		{
-			Timer tt6;
+		*/
+		//{
+			//Timer tt6;
 			//TIME_STFT TaskTimer tt5("Baking plan for batch %d", batchSize);
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
 			//TIME_STFT bakeTime = tt5.elapsedTime();
 			bakeTime = tt6.elapsed();
             //clFinish(opencl->getCommandQueue());
-		}
+		//}
+		//
 
+		/*
 		clAmdFftResultLocation loc;
 		clAmdFftGetResultLocation (plan, &loc);
 		if (loc != CLFFT_INPLACE)
 		{
 			throw std::runtime_error("Placeness Panic!!!");
 		}
+		*/
 
 		size_t tempBufferSize = 0;
 		clAmdFftGetTmpBufSize(plan, &tempBufferSize);
@@ -210,10 +215,10 @@ void FftClAmdFft:: // Once
 			{
 				clTempBuffer = clCreateBuffer ( opencl->getContext(), CL_MEM_READ_WRITE, tempBufferSize, 0, &cl_error);
 				//clTempBuffer = OpenClMemoryStorage::ReadWrite<1>(tempBuffer).ptr();
-				if(clamdfft_error != CL_SUCCESS)
+				if(cl_error != CL_SUCCESS)
 				{
 					//throw std::runtime_error("Could not write to OpenCL memory");
-					switch (clamdfft_error)
+					switch (cl_error)
 					{
 						case CL_INVALID_CONTEXT:
 							throw std::runtime_error("CL_INVALID_CONTEXT");
