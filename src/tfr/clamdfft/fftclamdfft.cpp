@@ -184,7 +184,7 @@ void FftClAmdFft:: // Once
 			//TIME_STFT TaskTimer tt5("Baking plan for batch %d", batchSize);
 			clamdfft_error = clAmdFftBakePlan(plan, 1, &opencl->getCommandQueue(), NULL, NULL);
 			//TIME_STFT bakeTime = tt5.elapsedTime();
-			bakeTime = tt6.elapsed();
+			//bakeTime = tt6.elapsed();
             //clFinish(opencl->getCommandQueue());
 		//}
 		//
