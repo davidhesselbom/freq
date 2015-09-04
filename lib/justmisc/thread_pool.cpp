@@ -34,7 +34,11 @@ thread_pool::
                     {
                         stringstream ss;
                         ss << (name?name:"thread_pool") << " " << i << "/" << n;
-                        pthread_setname_np(ss.str ().c_str ());
+#ifdef __clang__
+                         pthread_setname_np(ss.str ().c_str ());
+#else
+                        pthread_setname_np(pthread_self(), ss.str ().c_str ());
+#endif
                     }
 #endif
                     try {
