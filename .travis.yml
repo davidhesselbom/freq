@@ -1,0 +1,16 @@
+sudo: false
+addons:
+  apt:
+    packages:
+  - # List any required apt packages here
+before_script:
+  - # Checkout submodules here, maybe? Not sure whether that's done automatically or not.
+  - # Set up qt, maybe, run qmake, set up the environment and stuff
+script:
+  - # The below line is used for folding output from commands run in the "script" section,
+  - # commands in the "before_script" section are folded automatically. Not sure which commands
+  - # should go in which section, but this section should be used to run tests
+  - echo "travis_fold:start:tests"
+  - # call test script here, and make it return non-zero on failures so that GitHub knows if something went wrong
+  - # ./run-tests.sh
+  - echo "travis_fold:end:tests"
