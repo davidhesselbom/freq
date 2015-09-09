@@ -10,6 +10,7 @@ compiler:
 before_script:
   - # Checkout submodules here, maybe? Not sure whether that's done automatically or not.
   - # Set up qt, maybe, run qmake, set up the environment and stuff
+  - git submodule update --init
   - which qmake
   - # locate qmake # No locate on travis, apparently
   - qmake --version
