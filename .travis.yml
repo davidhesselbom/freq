@@ -14,6 +14,9 @@ before_script:
   - which qmake
   - # locate qmake # No locate on travis, apparently
   - qmake --version
+  - cd quick
+  - qmake -r
+  - make
 script:
   - # The below line is used for folding output from commands run in the "script" section,
   - # commands in the "before_script" section are folded automatically. Not sure which commands
