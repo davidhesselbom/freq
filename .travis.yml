@@ -11,7 +11,7 @@ before_script:
   - # Checkout submodules here, maybe? Not sure whether that's done automatically or not.
   - # Set up qt, maybe, run qmake, set up the environment and stuff
   - which qmake
-  - locate qmake
+  - # locate qmake # No locate on travis, apparently
   - qmake --version
 script:
   - # The below line is used for folding output from commands run in the "script" section,
