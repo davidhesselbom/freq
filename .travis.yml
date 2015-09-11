@@ -15,6 +15,7 @@ before_script:
   - # locate qmake # No locate on travis, apparently
   - qmake --version
   - cd quick
+  - qmake -spec linux-$CXX
   - qmake -r
   - make
 script:
