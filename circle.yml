@@ -1,6 +1,6 @@
 dependencies:
   pre:
-  - sudo apt-get -y -qq install libgles2-mesa-dev libegl1-mesa-drivers libgl1-mesa-dri mesa-common-dev libglu1-mesa-dev build-essential qt5-default g++-4.9
+  - sudo apt-get update; sudo apt-get -y -qq install libgles2-mesa-dev libegl1-mesa-drivers libgl1-mesa-dri mesa-common-dev libglu1-mesa-dev build-essential qt5-default g++-4.9
 checkout:
   post:
   - git submodule init
