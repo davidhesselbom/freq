@@ -4,7 +4,7 @@ machine:
 dependencies:
   pre:
   - yes y | sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-  - sudo apt-get update; sudo apt-get -y -qq install libgles2-mesa-dev libegl1-mesa-drivers libgl1-mesa-dri mesa-common-dev libglu1-mesa-dev build-essential qt5-default gcc-5 g++-5
+  - sudo apt-get update; sudo apt-get -y -qq install libgles2-mesa-dev libegl1-mesa-drivers libgl1-mesa-dri mesa-common-dev libglu1-mesa-dev build-essential qt5-default
 checkout:
   post:
   - git submodule init
