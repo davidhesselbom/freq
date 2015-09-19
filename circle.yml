@@ -1,6 +1,6 @@
 machine:
   environment:
-  - CXX: g++-5
+    CXX: g++-5
 dependencies:
   pre:
   - sudo add-apt-repository ppa:ubuntu-toolchain-r/test
