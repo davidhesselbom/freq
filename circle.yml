@@ -7,7 +7,7 @@ dependencies:
   - sudo apt-get purge $(dpkg -l | grep libqt | awk '{print $2}')
   - sudo apt-get install netbase
   - sudo apt-get install libqt5webkit5-dev qt5-default; true
-  - sudo apt-get install g++-4.9
+  - sudo apt-get install gcc-4.9
 checkout:
   post:
   - git submodule init
