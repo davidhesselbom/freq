@@ -77,11 +77,11 @@ void glBindBuffer(GLenum target, GLuint buffer)
     if (target == GL_ARRAY_BUFFER)
     {
         if (current.arrayBufferBinding!=buffer && buffer != 0)
-            ::glBindBuffer (target, current.arrayBufferBinding=buffer);
+            GlState::glBindBuffer (target, current.arrayBufferBinding=buffer);
     }
     else
     {
-        ::glBindBuffer (target, buffer);
+        GlState::glBindBuffer (target, buffer);
     }
 }
 
@@ -89,20 +89,20 @@ void glDeleteBuffers(GLsizei n, const GLuint *buffers)
 {
     for (GLsizei i=0; i<n; i++)
         if (current.arrayBufferBinding==buffers[i])
-            ::glBindBuffer (GL_ARRAY_BUFFER, current.arrayBufferBinding=0);
-    ::glDeleteBuffers (n, buffers);
+            GlState::glBindBuffer (GL_ARRAY_BUFFER, current.arrayBufferBinding=0);
+    GlState::glDeleteBuffers (n, buffers);
 }
 
 void glUseProgram(GLuint program)
 {
     if (program != current.program && program != 0)
-        ::glUseProgram(current.program = program);
+        GlState::glUseProgram(current.program = program);
 }
 
 void notifyDeletedProgram(GLuint program)
 {
     if (program == current.program)
-        ::glUseProgram(current.program = 0);
+        GlState::glUseProgram(current.program = 0);
 }
 
 void glEnableVertexAttribArray (GLuint index)
@@ -114,7 +114,7 @@ void glEnableVertexAttribArray (GLuint index)
         next.enabledAttribArray[index] = true;
     }
     else
-        ::glEnableVertexAttribArray (index);
+        GlState::glEnableVertexAttribArray (index);
 }
 
 void glDisableVertexAttribArray (GLuint index)
@@ -126,7 +126,7 @@ void glDisableVertexAttribArray (GLuint index)
         next.enabledAttribArray[index] = false;
     }
     else
-        ::glDisableVertexAttribArray (index);
+        GlState::glDisableVertexAttribArray (index);
 }
 
 void glDrawElements (GLenum mode, GLsizei count, GLenum type, const GLvoid *indices)
@@ -152,9 +152,9 @@ void sync ()
         {
             current.enabledAttribArray[i] = next.enabledAttribArray[i];
             if (next.enabledAttribArray[i])
-                ::glEnableVertexAttribArray (i);
+                GlState::glEnableVertexAttribArray (i);
             else
-                ::glDisableVertexAttribArray (i);
+                GlState::glDisableVertexAttribArray (i);
         }
 
     bool enabled_changed = false;
@@ -198,7 +198,7 @@ void set_default_gl_states_and_sync ()
     next.reset ();
     sync();
     if (current.arrayBufferBinding)
-        ::glBindBuffer(GL_ARRAY_BUFFER, current.arrayBufferBinding=0);
+        GlState::glBindBuffer(GL_ARRAY_BUFFER, current.arrayBufferBinding=0);
 }
 
 void assume_default_qt_quick_states ()
