@@ -16,7 +16,9 @@ QT += opengl
 SOURCES += *.cpp
 HEADERS += *.h
 
-win32: INCLUDEPATH += ../sonicawe-winlib
+win32: INCLUDEPATH += ../../3rdparty/windows
+win32: SOURCES += windows/*.cpp
+win32: SOURCES += windows/*.h
 
 macx:exists(/opt/local/include/): INCLUDEPATH += /opt/local/include/ # macports
 macx:exists(/usr/local/include/): INCLUDEPATH += /usr/local/include/ # homebrew

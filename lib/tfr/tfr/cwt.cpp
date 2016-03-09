@@ -28,7 +28,7 @@
 #include <boost/lambda/lambda.hpp>
 #include <boost/foreach.hpp>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
     #include "msc_stdc.h"
 
     #define _USE_MATH_DEFINES
@@ -651,15 +651,16 @@ Signal::pMonoBuffer Cwt::
 {
     ComputationCheckError();
 
-    Tfr::CwtChunk* cwtchunk = dynamic_cast<Tfr::CwtChunk*>(pchunk.get());
+    Chunk* chunk = pchunk.get();
+    Tfr::CwtChunk* cwtchunk = dynamic_cast<Tfr::CwtChunk*>(chunk);
     if (cwtchunk)
         return inverse(cwtchunk);
 
-    Tfr::CwtChunkPart* cwtchunkpart = dynamic_cast<Tfr::CwtChunkPart*>(pchunk.get());
+    Tfr::CwtChunkPart* cwtchunkpart = dynamic_cast<Tfr::CwtChunkPart*>(chunk);
     if (cwtchunkpart)
         return inverse(cwtchunkpart);
 
-    throw invalid_argument("Doesn't recognize chunk of type " + demangle( typeid(*pchunk.get())));
+    throw invalid_argument("Doesn't recognize chunk of type " + demangle( typeid(*chunk)));
 }
 
 
