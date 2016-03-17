@@ -34,8 +34,8 @@ GlFrameBuffer::
     {
         TaskInfo("GlFrameBuffer exception\n%s", boost::current_exception_diagnostic_information ().c_str());
 
-        if (depth_stencil_buffer_) glDeleteRenderbuffers(1, &depth_stencil_buffer_);
-        if (fboId_) glDeleteFramebuffers(1, &fboId_);
+        if (depth_stencil_buffer_) GlStateglDeleteRenderbuffers(1, &depth_stencil_buffer_);
+        if (fboId_) QGLFunctions::glDeleteFramebuffers(1, &fboId_);
 
         throw;
     }
@@ -64,7 +64,7 @@ GlFrameBuffer::
     {
         TaskInfo("GlFrameBuffer() caught exception");
         if (depth_stencil_buffer_) glDeleteRenderbuffers(1, &depth_stencil_buffer_);
-        if (fboId_) glDeleteFramebuffers(1, &fboId_);
+        if (fboId_) QGLFunctions::glDeleteFramebuffers(1, &fboId_);
         unbindFrameBuffer ();
 
         throw;
@@ -106,7 +106,7 @@ GlFrameBuffer::
         glDeleteRenderbuffers(1, &depth_stencil_buffer_);
 
     DEBUG_INFO TaskInfo("glDeleteFramebuffers");
-    glDeleteFramebuffers(1, &fboId_);
+    QGLFunctions::glDeleteFramebuffers(1, &fboId_);
 
     DEBUG_INFO TaskInfo("glGetError = %u", (unsigned)glGetError());
 
