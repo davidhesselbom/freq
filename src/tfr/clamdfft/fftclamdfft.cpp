@@ -171,14 +171,28 @@ void FftClAmdFft:: // Once
 			throw std::runtime_error(error);
 		}
 */
-		/*
+		
 		size_t currentBatchSize;
-		clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
+		clamdfft_error = clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
+		if (clamdfft_error != CLFFT_SUCCESS)
+		{
+			throw std::runtime_error("Could not get plan batch size!");
+		}
         if (currentBatchSize != batchSize)
         {
-            clAmdFftSetPlanBatchSize(plan, batchSize);
-        }
-		*/
+			std::cout << "Setting batch size " << batchSize << "..." << std::endl;
+            clamdfft_error = clAmdFftSetPlanBatchSize(plan, batchSize);
+			if (clamdfft_error != CLFFT_SUCCESS)
+			{
+				throw std::runtime_error("Could not set plan batch size!");
+			}
+			clamdfft_error = clAmdFftGetPlanBatchSize(plan, &currentBatchSize);
+			if (currentBatchSize != batchSize)
+			{
+				throw std::runtime_error("Setting plan batch size didn't work!");
+			}
+		}
+		
 		//{
 			//Timer tt6;
 			//TIME_STFT TaskTimer tt5("Baking plan for batch %d", batchSize);
