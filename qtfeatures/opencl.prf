@@ -33,10 +33,10 @@ useopenclamdamd {
 DEFINES += USE_AMD
 OBJECTS_DIR = $${OBJECTS_DIR}openclamdamd/
 win32 {
-	INCLUDEPATH += ../lib/sonicawe-winlib/clamdfft/include \
+	INCLUDEPATH += "$(CLAMDFFTROOT)/include" \
 
     LIBS += \
-    -l../lib/sonicawe-winlib/clamdfft/lib32/import/clAmdFft.Runtime \
+    -L"$(CLAMDFFTROOT)/lib32/import" \
 }
 
 SOURCES += \
